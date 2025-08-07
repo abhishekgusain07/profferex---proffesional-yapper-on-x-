@@ -116,7 +116,6 @@ const Studio = () => {
             <div className="space-y-2">
               <p><strong>Email:</strong> {user?.user.email}</p>
               <p><strong>Name:</strong> {user?.user.name || 'Not set'}</p>
-              <p><strong>Bio:</strong> {user?.user.bio || 'Not set'}</p>
               <p className="text-sm text-muted-foreground">{user?.message}</p>
             </div>
           )}

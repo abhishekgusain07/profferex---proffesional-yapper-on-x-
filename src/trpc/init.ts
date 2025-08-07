@@ -63,6 +63,7 @@ export const baseProcedure = t.procedure
 export const serverActionProcedure = t.procedure.experimental_caller(
   experimental_nextAppDirCaller({
     pathExtractor: ({ meta }) => (meta as Meta).span,
+    createContext: createTRPCContext,
   })
 )
 
