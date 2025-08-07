@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { 
   baseProcedure, 
   protectedProcedure,
-  protectedServerAction,
   createTRPCRouter 
 } from '../init'
 
@@ -44,22 +43,4 @@ export const exampleRouter = createTRPCRouter({
       }
     }),
 
-  // Server Action example (for forms)
-  updateProfileAction: protectedServerAction
-    .meta({ span: 'update-profile' })
-    .input(z.object({
-      name: z.string().min(1).max(50),
-      bio: z.string().max(160).optional(),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      // This can be called from Server Actions
-      return {
-        success: true,
-        user: {
-          ...ctx.user,
-          name: input.name,
-          bio: input.bio,
-        }
-      }
-    }),
 })
