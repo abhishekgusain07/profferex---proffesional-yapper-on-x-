@@ -40,9 +40,10 @@ export async function submitMessage(formData: FormData) {
     console.error('Failed to process message:', error)
     
     if (error instanceof z.ZodError) {
+      const issue = error.issues?.[0]
       return { 
         success: false, 
-        error: error.errors[0]?.message || 'Validation failed' 
+        error: issue?.message || 'Validation failed' 
       }
     }
     

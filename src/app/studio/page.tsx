@@ -19,8 +19,19 @@ const Studio = () => {
     { text: 'tRPC' },
     { enabled: !!session }
   )
+
+  // Twitter OAuth link
+  const createTwitterLink = trpc.twitter.createLink.useQuery(
+    { action: 'add-account' },
+    { enabled: false }
+  )
   
   const { data: user, isLoading: userLoading, refetch: refetchUser } = trpc.example.getUser.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
+
+  const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
     undefined,
     { enabled: !!session }
   )
@@ -72,9 +83,24 @@ const Studio = () => {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Studio</h1>
-        <Button variant="outline" onClick={() => signOut()}>
-          Logout
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={async () => {
+              try {
+                const res = await createTwitterLink.refetch()
+                const url = res.data?.url
+                if (url) window.location.href = url
+              } catch (e) {
+                // no-op; could show toast
+              }
+            }}
+          >
+            Connect Twitter
+          </Button>
+          <Button variant="outline" onClick={() => signOut()}>
+            Logout
+          </Button>
+        </div>
       </div>
 
       {/* Hello Query Example */}
@@ -117,6 +143,23 @@ const Studio = () => {
               <p><strong>Email:</strong> {user?.user.email}</p>
               <p><strong>Name:</strong> {user?.user.name || 'Not set'}</p>
               <p className="text-sm text-muted-foreground">{user?.message}</p>
+              <div className="mt-4">
+                <p className="font-semibold">Twitter accounts</p>
+                {accountsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" />
+                    <span>Loading…</span>
+                  </div>
+                ) : twitterAccounts && twitterAccounts.length > 0 ? (
+                  <ul className="text-sm list-disc pl-6">
+                    {twitterAccounts.map((a) => (
+                      <li key={a.id}>Account ID: {a.accountId}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No Twitter accounts connected.</p>
+                )}
+              </div>
             </div>
           )}
         </CardContent>

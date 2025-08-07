@@ -1,11 +1,10 @@
 import { createTRPCRouter } from '../init'
 import { exampleRouter } from './example'
+import { twitterRouter } from './twitter'
 
 export const appRouter = createTRPCRouter({
   example: exampleRouter,
-  // Add more routers here as needed
-  // auth: authRouter,
-  // user: userRouter,
+  twitter: twitterRouter,
 })
 
 export type AppRouter = typeof appRouter
