@@ -1,3 +1,13 @@
+const { TextEncoder, TextDecoder } = require('util')
+
+// Polyfills required by @neondatabase/serverless in Jest
+if (typeof global.TextEncoder === 'undefined') {
+  global.TextEncoder = TextEncoder
+}
+if (typeof global.TextDecoder === 'undefined') {
+  global.TextDecoder = TextDecoder
+}
+
 require('@testing-library/jest-dom')
 
 // Set test environment variables

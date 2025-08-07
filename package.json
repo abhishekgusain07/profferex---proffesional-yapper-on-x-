@@ -13,7 +13,10 @@
     "seed-stripe": "tsx seed-stripe.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "cors:generate": "node scripts/generate-cors-policy.js",
+    "cors:apply": "node scripts/apply-cors-policy.js",
+    "cors:setup": "npm run cors:generate && npm run cors:apply"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

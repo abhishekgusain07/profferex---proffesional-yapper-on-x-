@@ -106,6 +106,9 @@ src/
 - `npm run db:generate` - Generate database migrations
 - `npm run db:push` - Push database schema
 - `npm run db:studio` - Open Drizzle Studio
+- `npm run cors:generate` - Generate CORS policy for R2 bucket
+- `npm run cors:apply` - Apply CORS policy to R2 bucket
+- `npm run cors:setup` - Generate and apply CORS policy (combined)
 
 ## Environment Variables
 
@@ -113,7 +116,61 @@ Create a `.env.local` file with:
 
 ```env
 DATABASE_URL="your-postgresql-connection-string"
+
+# R2 Configuration (for file uploads)
+R2_ACCOUNT_ID="your-cloudflare-account-id"
+R2_ACCESS_KEY_ID="your-r2-access-key-id"
+R2_SECRET_ACCESS_KEY="your-r2-secret-access-key"
+R2_BUCKET_NAME="your-r2-bucket-name"
+R2_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
+
+# Production domain (for CORS policy)
+NEXT_PUBLIC_APP_URL="https://yourdomain.com"
+
+# Custom CORS origins (optional, comma-separated)
+CORS_ALLOWED_ORIGINS="https://staging.yourdomain.com,https://preview.yourdomain.com"
 ```
+
+## R2 CORS Configuration
+
+This project includes automated CORS policy management for Cloudflare R2 buckets to enable direct file uploads from the browser.
+
+### Quick Setup
+
+1. **Install and authenticate wrangler CLI** (if not done already):
+   ```bash
+   npm install -g wrangler
+   wrangler auth login
+   ```
+
+2. **Set up your R2 environment variables** in `.env.local` (see above)
+
+3. **Generate and apply CORS policy**:
+   ```bash
+   npm run cors:setup
+   ```
+
+### Manual CORS Management
+
+- **Generate policy only**: `npm run cors:generate`
+- **Apply existing policy**: `npm run cors:apply`
+- **Apply to specific bucket**: `npm run cors:apply cors-policy.json my-bucket-name`
+
+### CORS Policy Features
+
+- ✅ **Dynamic Origins**: Automatically includes production and staging domains
+- ✅ **Development Ready**: Includes localhost:3000 and :3001 by default
+- ✅ **Proper Headers**: Configured for R2 presigned POST uploads
+- ✅ **File Upload Support**: Optimized for image, video, and document uploads
+
+### Troubleshooting CORS
+
+If you encounter CORS errors:
+
+1. **Check origins match exactly**: Use browser dev tools to see the Origin header
+2. **Verify policy is applied**: Run `wrangler r2 bucket cors list your-bucket-name`
+3. **Test with curl**: Use the generated presigned URLs directly
+4. **Check wrangler auth**: Run `wrangler auth whoami` to verify authentication
 
 ## Database Setup
 

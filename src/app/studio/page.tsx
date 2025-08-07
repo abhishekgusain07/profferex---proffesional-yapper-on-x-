@@ -1,22 +1,50 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { trpc } from '@/trpc/client'
 import { useSession, signOut } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
+import { Loader2, X, Upload, Image as ImageIcon, Video } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
 
 const MAX_TWEET_LEN = 280
+
+const tweetSchema = z.object({
+  text: z.string().min(1, 'Tweet cannot be empty').max(MAX_TWEET_LEN, 'Tweet exceeds 280 characters'),
+})
+
+type TweetFormValues = z.infer<typeof tweetSchema>
+
+type LocalMedia = {
+  id: string
+  file: File
+  previewUrl: string
+  mediaType: 'image' | 'gif' | 'video'
+  uploading: boolean
+  progress: number
+  error?: string
+  r2Key?: string
+  media_id?: string
+}
 
 const Studio = () => {
   const { data: session, isPending: sessionLoading } = useSession()
   const [name, setName] = useState('')
   const [bio, setBio] = useState('')
-  const [tweetText, setTweetText] = useState('')
   const [lastTweetId, setLastTweetId] = useState<string | null>(null)
+  const [media, setMedia] = useState<LocalMedia[]>([])
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
+
+  const form = useForm<TweetFormValues>({
+    resolver: zodResolver(tweetSchema),
+    defaultValues: { text: '' },
+    mode: 'onChange',
+  })
 
   // tRPC queries
   const { data: hello, isLoading: helloLoading } = trpc.example.hello.useQuery(
@@ -40,7 +68,7 @@ const Studio = () => {
     { enabled: !!session }
   )
 
-  // tRPC mutation
+  // tRPC mutations
   const updateProfile = trpc.example.updateProfile.useMutation({
     onSuccess: () => {
       refetchUser()
@@ -49,15 +77,22 @@ const Studio = () => {
     },
   })
 
+  const uploadMediaFromR2 = trpc.twitter.uploadMediaFromR2.useMutation({
+    onError: (err, vars) => {
+      setMedia((prev) => prev.map((m) => (m.id === vars.r2Key ? { ...m, uploading: false, error: err.message } : m)))
+    },
+  })
+
   const postNow = trpc.twitter.postNow.useMutation({
     onSuccess: (res) => {
       setLastTweetId(res.tweetId)
-      setTweetText('')
+      form.reset({ text: '' })
+      setMedia([])
       refetchAccounts()
     },
   })
 
-  const remaining = useMemo(() => MAX_TWEET_LEN - tweetText.length, [tweetText])
+  const remaining = useMemo(() => MAX_TWEET_LEN - (form.watch('text')?.length || 0), [form.watch('text')])
   const overLimit = remaining < 0
 
   const handleUpdateProfile = (e: React.FormEvent) => {
@@ -69,6 +104,105 @@ const Studio = () => {
       bio: bio.trim() || undefined,
     })
   }
+
+  function detectMediaType(file: File): LocalMedia['mediaType'] | null {
+    if (file.type === 'image/gif') return 'gif'
+    if (file.type.startsWith('image/')) return 'image'
+    if (file.type === 'video/mp4' || file.type === 'video/quicktime' || file.type.startsWith('video/')) return 'video'
+    return null
+  }
+
+  function violatesTwitterRules(next: LocalMedia['mediaType']): string | null {
+    const hasVideoOrGif = media.some((m) => m.mediaType === 'video' || m.mediaType === 'gif')
+    const imageCount = media.filter((m) => m.mediaType === 'image').length
+    if (next === 'video' || next === 'gif') {
+      if (media.length > 0) return 'You can only attach one video or GIF by itself.'
+    } else if (next === 'image') {
+      if (hasVideoOrGif) return 'Images cannot be mixed with video or GIF.'
+      if (imageCount >= 4) return 'You can attach up to 4 images.'
+    }
+    return null
+  }
+
+  async function handleFilesSelected(files: FileList | null) {
+    if (!files || !twitterAccounts?.length) return
+
+    for (const file of Array.from(files)) {
+      const type = detectMediaType(file)
+      if (!type) {
+        // unsupported type
+        continue
+      }
+      const ruleError = violatesTwitterRules(type)
+      if (ruleError) {
+        // Could show a toast; for now skip
+        continue
+      }
+
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const previewUrl = URL.createObjectURL(file)
+      const local: LocalMedia = {
+        id,
+        file,
+        previewUrl,
+        mediaType: type,
+        uploading: true,
+        progress: 0,
+      }
+      setMedia((prev) => [...prev, local])
+
+      try {
+        console.log(`🚀 [UPLOAD-${id}] Starting upload for file:`, { 
+          fileName: file.name, 
+          fileType: file.type, 
+          fileSize: file.size,
+          mediaType: type 
+        })
+
+        // Option 1: Direct upload via API route (simpler, server proxy)
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload failed: ${uploadResponse.statusText}`)
+        }
+
+        const { key } = await uploadResponse.json()
+        console.log(`✅ [UPLOAD-${id}] Upload successful, key: ${key}`)
+
+        setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, progress: 100 } : m)))
+
+        console.log(`🔄 [UPLOAD-${id}] R2 upload complete, exchanging for Twitter media_id...`)
+        // Exchange for Twitter media_id
+        const { media_id } = await uploadMediaFromR2.mutateAsync({ r2Key: key, mediaType: type })
+        console.log(`✅ [UPLOAD-${id}] Got Twitter media_id:`, media_id)
+
+        setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, uploading: false, progress: 100, r2Key: key, media_id } : m)))
+        console.log(`🎉 [UPLOAD-${id}] Upload process complete!`)
+      } catch (err: any) {
+        console.error(`❌ [UPLOAD-${id}] Upload failed:`, err)
+        console.error(`❌ [UPLOAD-${id}] Error stack:`, err.stack)
+        setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, uploading: false, error: err.message || 'Upload failed' } : m)))
+      } finally {
+        console.log(`🧹 [UPLOAD-${id}] Cleaning up...`)
+        abortControllersRef.current.delete(id)
+      }
+    }
+  }
+
+  function removeMedia(id: string) {
+    const controller = abortControllersRef.current.get(id)
+    if (controller) controller.abort()
+    setMedia((prev) => prev.filter((m) => m.id !== id))
+  }
+
+  const hasUploading = media.some((m) => m.uploading)
+  const mediaIds = media.filter((m) => m.media_id).map((m) => m.media_id!)
 
   if (sessionLoading) {
     return (
@@ -123,12 +257,16 @@ const Studio = () => {
           <CardDescription>Write and post to Twitter immediately</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <form
+            onSubmit={form.handleSubmit((values) => {
+              postNow.mutate({ text: values.text.trim(), mediaIds })
+            })}
+            className="space-y-3"
+          >
             <Textarea
-              value={tweetText}
-              onChange={(e) => setTweetText(e.target.value)}
+              {...form.register('text')}
               placeholder="What's happening?"
-              maxLength={MAX_TWEET_LEN + 50} // allow typing over, but we’ll block submit
+              maxLength={MAX_TWEET_LEN + 50}
               className="min-h-32"
             />
             <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -141,10 +279,73 @@ const Studio = () => {
               </span>
               <span className={overLimit ? 'text-red-600' : ''}>{remaining}</span>
             </div>
+
+            {/* Media Picker */}
+            <div className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 px-3 py-2 border rounded cursor-pointer">
+                <Upload className="size-4" />
+                <span>Add media</span>
+                <input
+                  type="file"
+                  accept="image/*,image/gif,video/mp4,video/quicktime,video/*"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => {
+                    const files = e.target.files
+                    void handleFilesSelected(files)
+                    e.currentTarget.value = '' // allow same file re-select
+                  }}
+                />
+              </label>
+              <span className="text-xs text-muted-foreground">
+                Up to 4 images or 1 video/GIF. No mixing.
+              </span>
+            </div>
+
+            {/* Media Preview */}
+            {media.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {media.map((m) => (
+                  <div key={m.id} className="relative border rounded overflow-hidden">
+                    {m.mediaType === 'image' || m.mediaType === 'gif' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.previewUrl} alt="preview" className="w-full h-32 object-cover" />
+                    ) : (
+                      <div className="w-full h-32 flex items-center justify-center bg-muted text-muted-foreground">
+                        <Video className="size-6" />
+                        <span className="ml-2 text-sm">Video</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="absolute top-1 right-1 inline-flex items-center justify-center bg-black/60 text-white rounded p-1"
+                      onClick={() => removeMedia(m.id)}
+                    >
+                      <X className="size-4" />
+                    </button>
+                    {(m.uploading || m.error) && (
+                      <div className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center text-xs">
+                        {m.uploading ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="size-4 animate-spin" />
+                              <span>Uploading… {Math.round(m.progress)}%</span>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-red-300">{m.error}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <Button
-                onClick={() => postNow.mutate({ text: tweetText.trim() })}
-                disabled={postNow.isPending || overLimit || tweetText.trim().length === 0 || !twitterAccounts?.length}
+                type="submit"
+                disabled={postNow.isPending || overLimit || !form.getValues('text')?.trim() || !twitterAccounts?.length || hasUploading}
               >
                 {postNow.isPending ? (
                   <span className="flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Posting…</span>
@@ -159,7 +360,7 @@ const Studio = () => {
                 <span className="text-sm">Posted: <a href={`https://x.com/i/web/status/${lastTweetId}`} target="_blank" rel="noreferrer" className="underline">View</a></span>
               )}
             </div>
-          </div>
+          </form>
         </CardContent>
       </Card>
 
