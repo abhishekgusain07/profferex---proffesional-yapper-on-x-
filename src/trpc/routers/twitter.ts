@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createTRPCRouter, protectedProcedure } from '../init'
 import { redis } from '@/lib/redis'
-import { twitterOAuthClient } from '@/lib/twitter'
+import { twitterOAuthClient, createUserTwitterClient } from '@/lib/twitter'
 import { getBaseUrl } from '@/constants/base-url'
 import { db } from '@/db'
 import { account } from '@/db/schema'
@@ -42,12 +42,51 @@ export const twitterRouter = createTRPCRouter({
         .from(account)
         .where(and(eq(account.userId, ctx.user.id), eq(account.providerId, 'twitter')))
 
-      // Return a minimal shape for UI
       return results.map((a) => ({
         id: a.id,
         accountId: a.accountId,
         createdAt: a.createdAt,
         updatedAt: a.updatedAt,
       }))
+    }),
+
+  postNow: protectedProcedure
+    .input(z.object({
+      text: z.string().min(1, 'Tweet cannot be empty').max(280, 'Tweet exceeds 280 characters'),
+      accountId: z.string().optional(), // if omitted, use the first connected
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const accounts = await db
+        .select()
+        .from(account)
+        .where(and(eq(account.userId, ctx.user.id), eq(account.providerId, 'twitter')))
+
+      if (!accounts.length) {
+        throw new Error('No connected Twitter accounts')
+      }
+
+      const target = input.accountId
+        ? accounts.find((a) => a.id === input.accountId)
+        : accounts[0]
+
+      if (!target) {
+        throw new Error('Selected account not found')
+      }
+
+      if (!target.accessToken || !target.accessSecret) {
+        throw new Error('Account is missing credentials')
+      }
+
+      const client = createUserTwitterClient(target.accessToken, target.accessSecret)
+
+      try {
+        const result = await client.v2.tweet(input.text)
+        return { success: true, tweetId: result.data.id }
+      } catch (e: any) {
+        // eslint-disable-next-line no-console
+        console.error('Tweet failed', e)
+        const message = e?.data?.detail || e?.message || 'Failed to post tweet'
+        throw new Error(message)
+      }
     }),
 }) 

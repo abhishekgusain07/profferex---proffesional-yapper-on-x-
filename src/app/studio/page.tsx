@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { trpc } from '@/trpc/client'
 import { useSession, signOut } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
@@ -9,10 +9,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 
+const MAX_TWEET_LEN = 280
+
 const Studio = () => {
   const { data: session, isPending: sessionLoading } = useSession()
   const [name, setName] = useState('')
   const [bio, setBio] = useState('')
+  const [tweetText, setTweetText] = useState('')
+  const [lastTweetId, setLastTweetId] = useState<string | null>(null)
 
   // tRPC queries
   const { data: hello, isLoading: helloLoading } = trpc.example.hello.useQuery(
@@ -44,6 +48,17 @@ const Studio = () => {
       setBio('')
     },
   })
+
+  const postNow = trpc.twitter.postNow.useMutation({
+    onSuccess: (res) => {
+      setLastTweetId(res.tweetId)
+      setTweetText('')
+      refetchAccounts()
+    },
+  })
+
+  const remaining = useMemo(() => MAX_TWEET_LEN - tweetText.length, [tweetText])
+  const overLimit = remaining < 0
 
   const handleUpdateProfile = (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,9 +105,7 @@ const Studio = () => {
                 const res = await createTwitterLink.refetch()
                 const url = res.data?.url
                 if (url) window.location.href = url
-              } catch (e) {
-                // no-op; could show toast
-              }
+              } catch (e) {}
             }}
           >
             Connect Twitter
@@ -102,6 +115,53 @@ const Studio = () => {
           </Button>
         </div>
       </div>
+
+      {/* Tweet Composer */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Tweet Composer</CardTitle>
+          <CardDescription>Write and post to Twitter immediately</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <Textarea
+              value={tweetText}
+              onChange={(e) => setTweetText(e.target.value)}
+              placeholder="What's happening?"
+              maxLength={MAX_TWEET_LEN + 50} // allow typing over, but we’ll block submit
+              className="min-h-32"
+            />
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                {accountsLoading
+                  ? 'Checking accounts…'
+                  : twitterAccounts && twitterAccounts.length > 0
+                  ? `Connected accounts: ${twitterAccounts.length}`
+                  : 'No Twitter accounts connected'}
+              </span>
+              <span className={overLimit ? 'text-red-600' : ''}>{remaining}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => postNow.mutate({ text: tweetText.trim() })}
+                disabled={postNow.isPending || overLimit || tweetText.trim().length === 0 || !twitterAccounts?.length}
+              >
+                {postNow.isPending ? (
+                  <span className="flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Posting…</span>
+                ) : (
+                  'Post'
+                )}
+              </Button>
+              {postNow.error && (
+                <span className="text-sm text-red-600">{postNow.error.message}</span>
+              )}
+              {lastTweetId && (
+                <span className="text-sm">Posted: <a href={`https://x.com/i/web/status/${lastTweetId}`} target="_blank" rel="noreferrer" className="underline">View</a></span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Hello Query Example */}
       <Card>
