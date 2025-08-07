@@ -4,7 +4,7 @@ import * as React from 'react'
 import { baseStyles, sizeStyles, variantStyles } from '@/components/ui/duolingo-button'
 import GitHubStarButton from '@/components/ui/github-star-button'
 import { cn } from '@/lib/utils'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { Icons } from './icons'
 import { GITHUB_REPO } from '@/app/constants/misc'
@@ -22,15 +22,24 @@ const ActionButtons = ({
   onLinkClick,
   title,
   isAuthenticated,
+  isLoading,
 }: {
   className?: string
   onLinkClick?: () => void
   title: string
   isAuthenticated?: boolean
+  isLoading?: boolean
 }) => {
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false)
+  
   const handleLogout = async () => {
-    await signOut()
-    onLinkClick?.()
+    setIsLoggingOut(true)
+    try {
+      await signOut()
+      onLinkClick?.()
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   return (
@@ -42,17 +51,42 @@ const ActionButtons = ({
         )}
         repo={GITHUB_REPO}
       />
-      {isAuthenticated ? (
+      {isLoading ? (
         <button
           className={cn(
             baseStyles,
             variantStyles.primary,
             sizeStyles.sm,
             className?.includes('w-full') && 'w-full justify-center',
+            'cursor-not-allowed opacity-80'
+          )}
+          disabled
+        >
+          <div className="flex items-center gap-2">
+            <Loader2 className="size-4 animate-spin" />
+            <span className="animate-pulse">Loading...</span>
+          </div>
+        </button>
+      ) : isAuthenticated ? (
+        <button
+          className={cn(
+            baseStyles,
+            variantStyles.primary,
+            sizeStyles.sm,
+            className?.includes('w-full') && 'w-full justify-center',
+            isLoggingOut && 'cursor-not-allowed opacity-80'
           )}
           onClick={handleLogout}
+          disabled={isLoggingOut}
         >
-          Logout
+          {isLoggingOut ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              <span>Logging out...</span>
+            </div>
+          ) : (
+            'Logout'
+          )}
         </button>
       ) : (
         <Link
@@ -74,7 +108,7 @@ const ActionButtons = ({
 
 const Navbar = ({ title }: { title: string }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
-  const { data: session } = useSession()
+  const { data: session, isPending } = useSession()
 
   React.useEffect(() => {
     const originalOverflow = document.body.style.overflow
@@ -107,7 +141,11 @@ const Navbar = ({ title }: { title: string }) => {
           </button>
         </div>
         <div className="hidden lg:flex gap-4 lg:flex-1 lg:justify-end">
-          <ActionButtons title={title} isAuthenticated={!!session} />
+          <ActionButtons 
+            title={title} 
+            isAuthenticated={!!session} 
+            isLoading={isPending}
+          />
         </div>
       </nav>
 
@@ -136,6 +174,7 @@ const Navbar = ({ title }: { title: string }) => {
                   className="flex-col space-y-4 w-full"
                   onLinkClick={() => setMobileMenuOpen(false)}
                   isAuthenticated={!!session}
+                  isLoading={isPending}
                 />
               </div>
             </div>
