@@ -106,9 +106,28 @@ const Studio = () => {
   }
 
   function detectMediaType(file: File): LocalMedia['mediaType'] | null {
-    if (file.type === 'image/gif') return 'gif'
-    if (file.type.startsWith('image/')) return 'image'
-    if (file.type === 'video/mp4' || file.type === 'video/quicktime' || file.type.startsWith('video/')) return 'video'
+    console.log(`🔍 [DETECT] Analyzing file: "${file.name}", type: "${file.type}", size: ${file.size}`)
+    
+    // Force PNG detection for screenshot files
+    if (file.name.toLowerCase().includes('screenshot') && file.name.toLowerCase().endsWith('.png')) {
+      console.log(`📸 [DETECT] Screenshot PNG detected, forcing 'image' type`)
+      return 'image'
+    }
+    
+    if (file.type === 'image/gif') {
+      console.log(`🎭 [DETECT] GIF detected`)
+      return 'gif'
+    }
+    if (file.type.startsWith('image/')) {
+      console.log(`🖼️ [DETECT] Regular image detected`)
+      return 'image'
+    }
+    if (file.type === 'video/mp4' || file.type === 'video/quicktime' || file.type.startsWith('video/')) {
+      console.log(`🎬 [DETECT] Video detected`)
+      return 'video'
+    }
+    
+    console.log(`❌ [DETECT] Unsupported file type`)
     return null
   }
 
@@ -128,8 +147,16 @@ const Studio = () => {
     if (!files || !twitterAccounts?.length) return
 
     for (const file of Array.from(files)) {
+      console.log(`🔍 [FRONTEND] ========== FILE DETECTION DEBUG ==========`)
+      console.log(`🔍 [FRONTEND] File name: "${file.name}"`)
+      console.log(`🔍 [FRONTEND] File type (MIME): "${file.type}"`)
+      console.log(`🔍 [FRONTEND] File size: ${file.size} bytes`)
+      
       const type = detectMediaType(file)
+      console.log(`🎯 [FRONTEND] Detected media type: "${type}"`)
+      
       if (!type) {
+        console.log(`❌ [FRONTEND] Unsupported file type, skipping`)
         // unsupported type
         continue
       }
@@ -178,8 +205,20 @@ const Studio = () => {
         setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, progress: 100 } : m)))
 
         console.log(`🔄 [UPLOAD-${id}] R2 upload complete, exchanging for Twitter media_id...`)
+        // CRITICAL FIX: Override mediaType if extension doesn't match detected type
+        let finalMediaType = type
+        if (key.endsWith('.png') && type === 'gif') {
+          console.log(`🚨 [UPLOAD-${id}] MISMATCH: PNG file but detected as GIF, correcting to 'image'`)
+          finalMediaType = 'image'
+        } else if (key.endsWith('.gif') && type === 'image') {
+          console.log(`🚨 [UPLOAD-${id}] MISMATCH: GIF file but detected as image, correcting to 'gif'`)
+          finalMediaType = 'gif'  
+        }
+        
+        console.log(`📤 [UPLOAD-${id}] Calling uploadMediaFromR2 with:`, { r2Key: key, mediaType: finalMediaType })
+        
         // Exchange for Twitter media_id
-        const { media_id } = await uploadMediaFromR2.mutateAsync({ r2Key: key, mediaType: type })
+        const { media_id } = await uploadMediaFromR2.mutateAsync({ r2Key: key, mediaType: finalMediaType })
         console.log(`✅ [UPLOAD-${id}] Got Twitter media_id:`, media_id)
 
         setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, uploading: false, progress: 100, r2Key: key, media_id } : m)))
