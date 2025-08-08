@@ -107,27 +107,13 @@ const Studio = () => {
 
   function detectMediaType(file: File): LocalMedia['mediaType'] | null {
     console.log(`🔍 [DETECT] Analyzing file: "${file.name}", type: "${file.type}", size: ${file.size}`)
-    
-    // Force PNG detection for screenshot files
-    if (file.name.toLowerCase().includes('screenshot') && file.name.toLowerCase().endsWith('.png')) {
-      console.log(`📸 [DETECT] Screenshot PNG detected, forcing 'image' type`)
+    const isPng = file.type === 'image/png'
+    const isJpeg = file.type === 'image/jpeg'
+    if (isPng || isJpeg) {
+      console.log(`🖼️ [DETECT] Allowed image detected (${isPng ? 'PNG' : 'JPEG'})`)
       return 'image'
     }
-    
-    if (file.type === 'image/gif') {
-      console.log(`🎭 [DETECT] GIF detected`)
-      return 'gif'
-    }
-    if (file.type.startsWith('image/')) {
-      console.log(`🖼️ [DETECT] Regular image detected`)
-      return 'image'
-    }
-    if (file.type === 'video/mp4' || file.type === 'video/quicktime' || file.type.startsWith('video/')) {
-      console.log(`🎬 [DETECT] Video detected`)
-      return 'video'
-    }
-    
-    console.log(`❌ [DETECT] Unsupported file type`)
+    console.log(`❌ [DETECT] Unsupported file type (only PNG or JPEG allowed)`)
     return null
   }
 
@@ -205,16 +191,8 @@ const Studio = () => {
         setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, progress: 100 } : m)))
 
         console.log(`🔄 [UPLOAD-${id}] R2 upload complete, exchanging for Twitter media_id...`)
-        // CRITICAL FIX: Override mediaType if extension doesn't match detected type
-        let finalMediaType = type
-        if (key.endsWith('.png') && type === 'gif') {
-          console.log(`🚨 [UPLOAD-${id}] MISMATCH: PNG file but detected as GIF, correcting to 'image'`)
-          finalMediaType = 'image'
-        } else if (key.endsWith('.gif') && type === 'image') {
-          console.log(`🚨 [UPLOAD-${id}] MISMATCH: GIF file but detected as image, correcting to 'gif'`)
-          finalMediaType = 'gif'  
-        }
-        
+        // We only allow images (JPEG/PNG)
+        const finalMediaType: LocalMedia['mediaType'] = 'image'
         console.log(`📤 [UPLOAD-${id}] Calling uploadMediaFromR2 with:`, { r2Key: key, mediaType: finalMediaType })
         
         // Exchange for Twitter media_id
@@ -326,7 +304,7 @@ const Studio = () => {
                 <span>Add media</span>
                 <input
                   type="file"
-                  accept="image/*,image/gif,video/mp4,video/quicktime,video/*"
+                  accept="image/png,image/jpeg"
                   className="hidden"
                   multiple
                   onChange={(e) => {
@@ -337,7 +315,7 @@ const Studio = () => {
                 />
               </label>
               <span className="text-xs text-muted-foreground">
-                Up to 4 images or 1 video/GIF. No mixing.
+                Up to 4 images. JPEG or PNG only.
               </span>
             </div>
 

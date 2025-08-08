@@ -22,6 +22,13 @@ export async function POST(request: NextRequest) {
       lastModified: file.lastModified
     })
 
+    // Enforce allowed types only
+    const allowedTypes = new Set(['image/png', 'image/jpeg'])
+    if (!allowedTypes.has(file.type)) {
+      console.log(`❌ [API-UPLOAD] Disallowed content type: ${file.type}`)
+      return Response.json({ error: 'Only PNG or JPEG images are allowed' }, { status: 400 })
+    }
+
     if (!R2_BUCKET_NAME) {
       console.log(`❌ [API-UPLOAD] R2 bucket not configured`)
       return Response.json({ error: 'R2 bucket not configured' }, { status: 500 })
@@ -35,20 +42,10 @@ export async function POST(request: NextRequest) {
     console.log(`🔍 [API-UPLOAD] Original file extension: "${originalExt}"`)
     console.log(`🔍 [API-UPLOAD] File type from browser: "${file.type}"`)
     
-    // Use proper extension based on actual file type, not potentially wrong filename
+    // Use proper extension based on actual file type
     let correctExt = originalExt
-    if (file.type === 'image/png') {
-      correctExt = 'png'
-    } else if (file.type === 'image/jpeg') {
-      correctExt = 'jpg'  
-    } else if (file.type === 'image/gif') {
-      correctExt = 'gif'
-    } else if (file.type === 'image/webp') {
-      correctExt = 'webp'
-    } else if (file.type.startsWith('video/')) {
-      if (file.type === 'video/mp4') correctExt = 'mp4'
-      else if (file.type === 'video/quicktime') correctExt = 'mov'
-    }
+    if (file.type === 'image/png') correctExt = 'png'
+    else if (file.type === 'image/jpeg') correctExt = 'jpg'
     
     const key = `uploads/${nanoid()}.${correctExt}`
     console.log(`🎯 [API-UPLOAD] Using corrected extension: "${correctExt}"`)

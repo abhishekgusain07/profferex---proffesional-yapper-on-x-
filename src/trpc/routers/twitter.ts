@@ -53,7 +53,7 @@ export const twitterRouter = createTRPCRouter({
     }),
 
   uploadMediaFromR2: protectedProcedure
-    .input(z.object({ r2Key: z.string().min(1), mediaType: z.enum(['image', 'gif', 'video']) }))
+    .input(z.object({ r2Key: z.string().min(1), mediaType: z.literal('image') }))
     .mutation(async ({ ctx, input }) => {
       if (!R2_BUCKET_NAME) throw new Error('R2 bucket not configured')
 
@@ -86,37 +86,12 @@ export const twitterRouter = createTRPCRouter({
       })
       
       if (!mimeType) {
-        console.log(`🔄 [TWITTER-MEDIA] No ContentType from R2, using fallback logic...`)
-        // Better fallback logic based on file extension and media type
+        console.log(`🔄 [TWITTER-MEDIA] No ContentType from R2, using image-only fallback...`)
         const keyLower = input.r2Key.toLowerCase()
-        console.log(`🔍 [TWITTER-MEDIA] Key toLowerCase: "${keyLower}"`)
-        console.log(`🔍 [TWITTER-MEDIA] Checking conditions:`)
-        console.log(`    - input.mediaType === 'gif': ${input.mediaType === 'gif'}`)
-        console.log(`    - keyLower.endsWith('.gif'): ${keyLower.endsWith('.gif')}`)
-        console.log(`    - input.mediaType === 'image': ${input.mediaType === 'image'}`)
-        
-        if (input.mediaType === 'gif' || keyLower.endsWith('.gif')) {
-          mimeType = 'image/gif'
-          console.log(`✅ [TWITTER-MEDIA] Classified as GIF`)
-        } else if (input.mediaType === 'image') {
-          console.log(`🖼️ [TWITTER-MEDIA] Processing as regular image...`)
-          if (keyLower.endsWith('.png')) {
-            mimeType = 'image/png'
-            console.log(`✅ [TWITTER-MEDIA] Classified as PNG`)
-          } else if (keyLower.endsWith('.jpg') || keyLower.endsWith('.jpeg')) {
-            mimeType = 'image/jpeg'
-            console.log(`✅ [TWITTER-MEDIA] Classified as JPEG`)
-          } else {
-            mimeType = 'image/png' // default fallback
-            console.log(`⚠️ [TWITTER-MEDIA] No specific image type, defaulting to PNG`)
-          }
-        } else if (input.mediaType === 'video') {
-          if (keyLower.endsWith('.mp4')) mimeType = 'video/mp4'
-          else if (keyLower.endsWith('.mov')) mimeType = 'video/quicktime'
-          else mimeType = 'video/mp4' // default fallback
-          console.log(`✅ [TWITTER-MEDIA] Classified as video: ${mimeType}`)
-        } else {
-          console.log(`❌ [TWITTER-MEDIA] Unknown mediaType: "${input.mediaType}"`)
+        if (keyLower.endsWith('.png')) {
+          mimeType = 'image/png'
+        } else if (keyLower.endsWith('.jpg') || keyLower.endsWith('.jpeg')) {
+          mimeType = 'image/jpeg'
         }
       } else {
         console.log(`✅ [TWITTER-MEDIA] Using ContentType from R2 header`)
@@ -124,56 +99,11 @@ export const twitterRouter = createTRPCRouter({
       
       console.log(`🎯 [TWITTER-MEDIA] Final MIME type: "${mimeType}"`)
       
-      // DEFENSIVE VALIDATION: Fix mediaType mismatches
-      console.log(`🛡️ [TWITTER-MEDIA] ========== DEFENSIVE VALIDATION ==========`)
-      let actualMediaType = input.mediaType
-      
-      // CRITICAL FIX: Check R2 key extension vs detected type for PNG/GIF confusion
-      const keyExt = input.r2Key.split('.').pop()?.toLowerCase()
-      console.log(`🔍 [TWITTER-MEDIA] R2 key extension: "${keyExt}"`)
-      
-      if (keyExt === 'png' && mimeType === 'image/gif') {
-        console.log(`🚨 [TWITTER-MEDIA] CRITICAL MISMATCH: PNG file stored as GIF! Forcing image/png`)
-        // This is likely a screenshot PNG that got misprocessed
-        actualMediaType = 'image'
-        // Override the mimeType as well to prevent Twitter confusion
-        mimeType = 'image/png'
-        console.log(`🔧 [TWITTER-MEDIA] CORRECTED: mimeType changed to image/png`)
-      } else if (keyExt === 'gif' && mimeType?.startsWith('image/') && mimeType !== 'image/gif') {
-        console.log(`🚨 [TWITTER-MEDIA] MISMATCH: GIF file but wrong MIME type`)
-        actualMediaType = 'gif'
-        mimeType = 'image/gif'
-        console.log(`🔧 [TWITTER-MEDIA] CORRECTED: mimeType changed to image/gif`)
+      // Only PNG/JPEG permitted
+      const allowedImageTypes = new Set(['image/png', 'image/jpeg'])
+      if (!mimeType || !allowedImageTypes.has(mimeType)) {
+        throw new Error('Only PNG or JPEG images are allowed')
       }
-      
-      // Override mediaType based on actual file format detection
-      else if (mimeType === 'image/gif') {
-        if (input.mediaType !== 'gif') {
-          console.log(`🚨 [TWITTER-MEDIA] MISMATCH DETECTED: input.mediaType="${input.mediaType}" but mimeType="${mimeType}"`)
-          console.log(`🔧 [TWITTER-MEDIA] OVERRIDING mediaType from "${input.mediaType}" to "gif"`)
-          actualMediaType = 'gif'
-        } else {
-          console.log(`✅ [TWITTER-MEDIA] mediaType matches: GIF`)
-        }
-      } else if (mimeType?.startsWith('image/') && mimeType !== 'image/gif') {
-        if (input.mediaType !== 'image') {
-          console.log(`🚨 [TWITTER-MEDIA] MISMATCH DETECTED: input.mediaType="${input.mediaType}" but mimeType="${mimeType}" (regular image)`)
-          console.log(`🔧 [TWITTER-MEDIA] OVERRIDING mediaType from "${input.mediaType}" to "image"`)
-          actualMediaType = 'image'
-        } else {
-          console.log(`✅ [TWITTER-MEDIA] mediaType matches: Image`)
-        }
-      } else if (mimeType?.startsWith('video/')) {
-        if (input.mediaType !== 'video') {
-          console.log(`🚨 [TWITTER-MEDIA] MISMATCH DETECTED: input.mediaType="${input.mediaType}" but mimeType="${mimeType}"`)
-          console.log(`🔧 [TWITTER-MEDIA] OVERRIDING mediaType from "${input.mediaType}" to "video"`)
-          actualMediaType = 'video'
-        } else {
-          console.log(`✅ [TWITTER-MEDIA] mediaType matches: Video`)
-        }
-      }
-      
-      console.log(`🎯 [TWITTER-MEDIA] Final actualMediaType: "${actualMediaType}" (was: "${input.mediaType}")`)
 
       const obj = await r2Client.send(
         new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: input.r2Key })
@@ -236,140 +166,66 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Could not determine MIME type for media')
       }
 
-      // Add media-specific validation using corrected actualMediaType
+      // Image-only validation
       console.log(`📏 [TWITTER-MEDIA] ========== SIZE AND FORMAT VALIDATION ==========`)
-      if (actualMediaType === 'gif') {
-        console.log(`🎭 [TWITTER-MEDIA] Validating as GIF...`)
-        // Twitter GIF limits: 15MB max, must be valid GIF format
-        const maxGifSize = 15 * 1024 * 1024 // 15MB
-        if (buffer.length > maxGifSize) {
-          throw new Error(`GIF file too large: ${Math.round(buffer.length / 1024 / 1024)}MB. Twitter limit is 15MB.`)
-        }
-        
-        // Basic GIF format validation - check GIF header
-        const gifHeader = buffer.subarray(0, 6).toString('ascii')
-        if (!gifHeader.startsWith('GIF87a') && !gifHeader.startsWith('GIF89a')) {
-          throw new Error('Invalid GIF format. File does not have valid GIF header.')
-        }
-        
-        console.log(`✅ [TWITTER-MEDIA] GIF validation passed: ${Math.round(buffer.length / 1024)}KB, format: ${gifHeader}`)
-      } else if (actualMediaType === 'image') {
-        console.log(`🖼️ [TWITTER-MEDIA] Validating as regular image...`)
+      {
+        console.log(`🖼️ [TWITTER-MEDIA] Validating image...`)
         // Image size limit: 5MB for regular images
         const maxImageSize = 5 * 1024 * 1024 // 5MB
         if (buffer.length > maxImageSize) {
           throw new Error(`Image file too large: ${Math.round(buffer.length / 1024 / 1024)}MB. Twitter limit is 5MB.`)
         }
         console.log(`✅ [TWITTER-MEDIA] Image validation passed: ${Math.round(buffer.length / 1024)}KB`)
-      } else if (actualMediaType === 'video') {
-        console.log(`🎬 [TWITTER-MEDIA] Validating as video...`)
-        // Video size limit: 512MB
-        const maxVideoSize = 512 * 1024 * 1024 // 512MB
-        if (buffer.length > maxVideoSize) {
-          throw new Error(`Video file too large: ${Math.round(buffer.length / 1024 / 1024)}MB. Twitter limit is 512MB.`)
-        }
-        console.log(`✅ [TWITTER-MEDIA] Video validation passed: ${Math.round(buffer.length / 1024 / 1024)}MB`)
-      } else {
-        console.log(`❌ [TWITTER-MEDIA] Unknown actualMediaType for validation: "${actualMediaType}"`)
       }
       
       const client = createUserTwitterClient(target.accessToken, target.accessSecret)
       
-      // Add proper media upload options based on Twitter API requirements
-      const uploadOptions: any = { mimeType }
-      
-      console.log(`🔧 [TWITTER-MEDIA] ========== TWITTER UPLOAD OPTIONS DEBUG ==========`)
-      console.log(`🔧 [TWITTER-MEDIA] Original input.mediaType: "${input.mediaType}"`)
-      console.log(`🔧 [TWITTER-MEDIA] Corrected actualMediaType: "${actualMediaType}"`)
-      console.log(`🔧 [TWITTER-MEDIA] Final mimeType: "${mimeType}"`)
+      console.log(`🔧 [TWITTER-MEDIA] ========== TWITTER UPLOAD DEBUG ==========`)
+      console.log(`🔧 [TWITTER-MEDIA] MediaType: "${input.mediaType}"`)
+      console.log(`🔧 [TWITTER-MEDIA] Using mimeType: "${mimeType}"`)
       console.log(`🔧 [TWITTER-MEDIA] Buffer size: ${buffer.length} bytes`)
-      
-      // Add media category for better Twitter processing - USE CORRECTED actualMediaType
-      if (actualMediaType === 'gif') {
-        console.log(`🎭 [TWITTER-MEDIA] PROCESSING AS GIF - actualMediaType is 'gif'`)
-        // GIFs are treated as images by Twitter API, not a separate category
-        uploadOptions.media_category = 'tweet_image'
-        // Add additional options for GIF processing
-        uploadOptions.shared = false // Prevent sharing during processing
-        // Increase timeout for GIF processing (they take longer)
-        uploadOptions.maxUploadRetries = 3
-        uploadOptions.chunkSize = 5 * 1024 * 1024 // 5MB chunks for better handling
-        console.log(`✅ [TWITTER-MEDIA] Set media_category = 'tweet_image' (GIFs use image category)`)
-      } else if (actualMediaType === 'image') {
-        console.log(`🖼️ [TWITTER-MEDIA] PROCESSING AS IMAGE - actualMediaType is 'image'`)
-        uploadOptions.media_category = 'tweet_image'
-        console.log(`✅ [TWITTER-MEDIA] Set media_category = 'tweet_image'`)
-      } else if (actualMediaType === 'video') {
-        console.log(`🎬 [TWITTER-MEDIA] PROCESSING AS VIDEO - actualMediaType is 'video'`)
-        uploadOptions.media_category = 'tweet_video'
-        // For larger videos, use longmp4 type
-        if (buffer.length > 15 * 1024 * 1024) { // 15MB
-          uploadOptions.type = 'longmp4'
-          uploadOptions.maxUploadRetries = 3
-          uploadOptions.chunkSize = 5 * 1024 * 1024 // 5MB chunks
-          console.log(`✅ [TWITTER-MEDIA] Large video, set type = 'longmp4'`)
-        }
-        console.log(`✅ [TWITTER-MEDIA] Set media_category = 'tweet_video'`)
-      } else {
-        console.log(`❌ [TWITTER-MEDIA] UNKNOWN ACTUAL MEDIA TYPE: "${actualMediaType}"`)
-        console.log(`❌ [TWITTER-MEDIA] This should not happen! Defaulting to 'tweet_image'`)
-        uploadOptions.media_category = 'tweet_image'
-      }
-      
-      console.log(`🚀 [TWITTER-MEDIA] Final upload options:`, {
-        mimeType: uploadOptions.mimeType,
-        media_category: uploadOptions.media_category,
-        bufferSize: buffer.length,
-        type: uploadOptions.type,
-        shared: uploadOptions.shared,
-        maxUploadRetries: uploadOptions.maxUploadRetries,
-        chunkSize: uploadOptions.chunkSize
-      })
-      
+       
       try {
-        const mediaId = await client.v1.uploadMedia(buffer, uploadOptions)
+        // Mirror upstream implementation: only pass mimeType
+        const mediaId = await client.v1.uploadMedia(buffer, { mimeType })
         console.log(`✅ [TWITTER-MEDIA] Successfully uploaded to Twitter, media_id: ${mediaId}`)
         
         return { media_id: mediaId }
       } catch (error: any) {
         console.error(`❌ [TWITTER-MEDIA] Twitter upload failed:`, {
-          error: error.message,
-          code: error.code,
-          data: error.data,
-          stack: error.stack,
+          error: error?.message,
+          code: error?.code,
+          data: error?.data,
+          stack: error?.stack,
           mimeType,
           bufferSize: buffer.length,
           mediaType: input.mediaType,
-          r2Key: input.r2Key
+          r2Key: input.r2Key,
         })
-        
-        // Better error messages for common issues - use corrected actualMediaType
-        if (error.message?.includes('InvalidMedia')) {
-          if (actualMediaType === 'gif') {
-            throw new Error(`GIF processing failed: ${error.message}. This GIF may use unsupported features or be corrupted.`)
-          } else {
-            throw new Error(`Failed to process media: ${error.message}. Check if the file format is supported by Twitter.`)
-          }
-        } else if (error.message?.includes('awaitForMediaProcessingCompletion')) {
-          throw new Error(`Media processing timeout: Twitter took too long to process the ${actualMediaType}. Try uploading a smaller or simpler file.`)
-        } else if (error.code === 324) {
-          throw new Error('Media file is too large or invalid format.')
-        } else if (error.code === 325) {
-          throw new Error('Media file is corrupted or unsupported.')
-        } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNRESET') {
-          throw new Error('Network error during upload. Please try again.')
-        } else {
-          throw new Error(`Failed to upload media to Twitter: ${error.message || 'Unknown error'}`)
+
+        // Mirror upstream-style messages
+        const message = error?.message || 'Unknown error'
+        if (message.includes('InvalidMedia')) {
+          throw new Error(`Failed to process media: ${message}`)
         }
+        if (message.includes('awaitForMediaProcessingCompletion')) {
+          throw new Error('Media processing timeout: Twitter took too long to process the image.')
+        }
+        throw new Error(`Failed to upload media to Twitter: ${message}`)
       }
     }),
 
   postNow: protectedProcedure
-    .input(z.object({
-      text: z.string().min(1, 'Tweet cannot be empty').max(280, 'Tweet exceeds 280 characters'),
-      accountId: z.string().optional(), // if omitted, use the first connected
-      mediaIds: z.array(z.string()).optional(),
-    }))
+    .input(
+      z.object({
+        text: z
+          .string()
+          .min(1, 'Tweet cannot be empty')
+          .max(280, 'Tweet exceeds 280 characters'),
+        accountId: z.string().optional(),
+        mediaIds: z.array(z.string()).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const accounts = await db
         .select()
@@ -392,8 +248,6 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Account is missing credentials')
       }
 
-      // enforce Twitter media rules: either 1 video/gif or up to 4 images (we assume client validates)
-
       const client = createUserTwitterClient(target.accessToken, target.accessSecret)
 
       try {
@@ -410,4 +264,4 @@ export const twitterRouter = createTRPCRouter({
         throw new Error(message)
       }
     }),
-}) 
+})
