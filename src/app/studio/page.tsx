@@ -7,10 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, X, Upload, Image as ImageIcon, Video } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Loader2, X, Upload, Image as ImageIcon, Video, Calendar as CalendarIcon, Clock, Edit, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { format, addMinutes } from 'date-fns'
 
 const MAX_TWEET_LEN = 280
 
@@ -38,6 +44,9 @@ const Studio = () => {
   const [bio, setBio] = useState('')
   const [lastTweetId, setLastTweetId] = useState<string | null>(null)
   const [media, setMedia] = useState<LocalMedia[]>([])
+  const [isScheduling, setIsScheduling] = useState(false)
+  const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined)
+  const [scheduledTime, setScheduledTime] = useState('')
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
   const form = useForm<TweetFormValues>({
@@ -92,8 +101,64 @@ const Studio = () => {
     },
   })
 
+  const scheduleTweet = trpc.twitter.schedule.useMutation({
+    onSuccess: () => {
+      form.reset({ text: '' })
+      setMedia([])
+      setScheduledDate(undefined)
+      setScheduledTime('')
+      setIsScheduling(false)
+      refetchScheduled()
+    },
+  })
+
+  const { data: scheduledTweets, refetch: refetchScheduled } = trpc.twitter.getScheduled.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
+
+  const cancelScheduled = trpc.twitter.cancelScheduled.useMutation({
+    onSuccess: () => {
+      refetchScheduled()
+    },
+  })
+
   const remaining = useMemo(() => MAX_TWEET_LEN - (form.watch('text')?.length || 0), [form.watch('text')])
   const overLimit = remaining < 0
+
+  // Generate default schedule time (30 minutes from now)
+  const getDefaultScheduleTime = () => {
+    const now = new Date()
+    const defaultTime = addMinutes(now, 30)
+    return format(defaultTime, 'HH:mm')
+  }
+
+  // Combine date and time into Unix timestamp
+  const getScheduledUnix = () => {
+    if (!scheduledDate || !scheduledTime) return null
+    const [hours, minutes] = scheduledTime.split(':').map(Number)
+    const combined = new Date(scheduledDate)
+    combined.setHours(hours, minutes, 0, 0)
+    return Math.floor(combined.getTime() / 1000)
+  }
+
+  // Handle form submission (post now or schedule)
+  const handleSubmit = (values: TweetFormValues) => {
+    if (isScheduling) {
+      const scheduledUnix = getScheduledUnix()
+      if (!scheduledUnix) {
+        alert('Please select a valid date and time')
+        return
+      }
+      scheduleTweet.mutate({
+        text: values.text.trim(),
+        scheduledUnix,
+        mediaIds,
+      })
+    } else {
+      postNow.mutate({ text: values.text.trim(), mediaIds })
+    }
+  }
 
   const handleUpdateProfile = (e: React.FormEvent) => {
     e.preventDefault()
@@ -267,119 +332,240 @@ const Studio = () => {
         </div>
       </div>
 
-      {/* Tweet Composer */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Tweet Composer</CardTitle>
-          <CardDescription>Write and post to Twitter immediately</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={form.handleSubmit((values) => {
-              postNow.mutate({ text: values.text.trim(), mediaIds })
-            })}
-            className="space-y-3"
-          >
-            <Textarea
-              {...form.register('text')}
-              placeholder="What's happening?"
-              maxLength={MAX_TWEET_LEN + 50}
-              className="min-h-32"
-            />
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                {accountsLoading
-                  ? 'Checking accounts…'
-                  : twitterAccounts && twitterAccounts.length > 0
-                  ? `Connected accounts: ${twitterAccounts.length}`
-                  : 'No Twitter accounts connected'}
-              </span>
-              <span className={overLimit ? 'text-red-600' : ''}>{remaining}</span>
-            </div>
+      {/* Tweet Composer with Scheduling */}
+      <Tabs defaultValue="composer" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="composer">Compose</TabsTrigger>
+          <TabsTrigger value="scheduled">Scheduled ({scheduledTweets?.length || 0})</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="composer">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tweet Composer</CardTitle>
+              <CardDescription>
+                {isScheduling ? 'Schedule your tweet for later' : 'Write and post to Twitter immediately'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-3">
+                {/* Scheduling Toggle */}
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="scheduling-mode"
+                    checked={isScheduling}
+                    onCheckedChange={setIsScheduling}
+                  />
+                  <Label htmlFor="scheduling-mode">Schedule for later</Label>
+                </div>
 
-            {/* Media Picker */}
-            <div className="flex items-center gap-2">
-              <label className="inline-flex items-center gap-2 px-3 py-2 border rounded cursor-pointer">
-                <Upload className="size-4" />
-                <span>Add media</span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  className="hidden"
-                  multiple
-                  onChange={(e) => {
-                    const files = e.target.files
-                    void handleFilesSelected(files)
-                    e.currentTarget.value = '' // allow same file re-select
-                  }}
+                {/* Date and Time Picker (only when scheduling) */}
+                {isScheduling && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {scheduledDate ? format(scheduledDate, 'PPP') : <span>Pick a date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={scheduledDate}
+                            onSelect={setScheduledDate}
+                            disabled={(date) => date < new Date()}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="time">Time</Label>
+                      <Input
+                        id="time"
+                        type="time"
+                        value={scheduledTime || getDefaultScheduleTime()}
+                        onChange={(e) => setScheduledTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <Textarea
+                  {...form.register('text')}
+                  placeholder="What's happening?"
+                  maxLength={MAX_TWEET_LEN + 50}
+                  className="min-h-32"
                 />
-              </label>
-              <span className="text-xs text-muted-foreground">
-                Up to 4 images. JPEG or PNG only.
-              </span>
-            </div>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>
+                    {accountsLoading
+                      ? 'Checking accounts…'
+                      : twitterAccounts && twitterAccounts.length > 0
+                      ? `Connected accounts: ${twitterAccounts.length}`
+                      : 'No Twitter accounts connected'}
+                  </span>
+                  <span className={overLimit ? 'text-red-600' : ''}>{remaining}</span>
+                </div>
 
-            {/* Media Preview */}
-            {media.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {media.map((m) => (
-                  <div key={m.id} className="relative border rounded overflow-hidden">
-                    {m.mediaType === 'image' || m.mediaType === 'gif' ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.previewUrl} alt="preview" className="w-full h-32 object-cover" />
-                    ) : (
-                      <div className="w-full h-32 flex items-center justify-center bg-muted text-muted-foreground">
-                        <Video className="size-6" />
-                        <span className="ml-2 text-sm">Video</span>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      className="absolute top-1 right-1 inline-flex items-center justify-center bg-black/60 text-white rounded p-1"
-                      onClick={() => removeMedia(m.id)}
-                    >
-                      <X className="size-4" />
-                    </button>
-                    {(m.uploading || m.error) && (
-                      <div className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center text-xs">
-                        {m.uploading ? (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <Loader2 className="size-4 animate-spin" />
-                              <span>Uploading… {Math.round(m.progress)}%</span>
-                            </div>
-                          </>
+                {/* Media Picker */}
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center gap-2 px-3 py-2 border rounded cursor-pointer">
+                    <Upload className="size-4" />
+                    <span>Add media</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className="hidden"
+                      multiple
+                      onChange={(e) => {
+                        const files = e.target.files
+                        void handleFilesSelected(files)
+                        e.currentTarget.value = ''
+                      }}
+                    />
+                  </label>
+                  <span className="text-xs text-muted-foreground">
+                    Up to 4 images. JPEG or PNG only.
+                  </span>
+                </div>
+
+                {/* Media Preview */}
+                {media.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {media.map((m) => (
+                      <div key={m.id} className="relative border rounded overflow-hidden">
+                        {m.mediaType === 'image' || m.mediaType === 'gif' ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={m.previewUrl} alt="preview" className="w-full h-32 object-cover" />
                         ) : (
-                          <span className="text-red-300">{m.error}</span>
+                          <div className="w-full h-32 flex items-center justify-center bg-muted text-muted-foreground">
+                            <Video className="size-6" />
+                            <span className="ml-2 text-sm">Video</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          className="absolute top-1 right-1 inline-flex items-center justify-center bg-black/60 text-white rounded p-1"
+                          onClick={() => removeMedia(m.id)}
+                        >
+                          <X className="size-4" />
+                        </button>
+                        {(m.uploading || m.error) && (
+                          <div className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center text-xs">
+                            {m.uploading ? (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <Loader2 className="size-4 animate-spin" />
+                                  <span>Uploading… {Math.round(m.progress)}%</span>
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-red-300">{m.error}</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="submit"
-                disabled={postNow.isPending || overLimit || !form.getValues('text')?.trim() || !twitterAccounts?.length || hasUploading}
-              >
-                {postNow.isPending ? (
-                  <span className="flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Posting…</span>
-                ) : (
-                  'Post'
                 )}
-              </Button>
-              {postNow.error && (
-                <span className="text-sm text-red-600">{postNow.error.message}</span>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="submit"
+                    disabled={
+                      (isScheduling ? scheduleTweet.isPending : postNow.isPending) ||
+                      overLimit ||
+                      !form.getValues('text')?.trim() ||
+                      !twitterAccounts?.length ||
+                      hasUploading ||
+                      (isScheduling && (!scheduledDate || !scheduledTime))
+                    }
+                  >
+                    {(isScheduling ? scheduleTweet.isPending : postNow.isPending) ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="size-4 animate-spin" />
+                        {isScheduling ? 'Scheduling…' : 'Posting…'}
+                      </span>
+                    ) : (
+                      isScheduling ? 'Schedule Tweet' : 'Post Now'
+                    )}
+                  </Button>
+                  {(postNow.error || scheduleTweet.error) && (
+                    <span className="text-sm text-red-600">
+                      {postNow.error?.message || scheduleTweet.error?.message}
+                    </span>
+                  )}
+                  {lastTweetId && (
+                    <span className="text-sm">
+                      Posted: <a href={`https://x.com/i/web/status/${lastTweetId}`} target="_blank" rel="noreferrer" className="underline">View</a>
+                    </span>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="scheduled">
+          <Card>
+            <CardHeader>
+              <CardTitle>Scheduled Tweets</CardTitle>
+              <CardDescription>Manage your scheduled tweets</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {scheduledTweets && scheduledTweets.length > 0 ? (
+                <div className="space-y-4">
+                  {scheduledTweets.map((tweet) => (
+                    <div key={tweet.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm flex-1">{tweet.content}</p>
+                        <div className="flex items-center gap-2 ml-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => cancelScheduled.mutate({ tweetId: tweet.id })}
+                            disabled={cancelScheduled.isPending}
+                          >
+                            {cancelScheduled.isPending ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="size-3" />
+                        <span>
+                          Scheduled for {tweet.scheduledFor ? format(new Date(tweet.scheduledFor), 'PPP p') : 'Unknown'}
+                        </span>
+                      </div>
+                      {tweet.mediaIds && tweet.mediaIds.length > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          📎 {tweet.mediaIds.length} media attachment{tweet.mediaIds.length > 1 ? 's' : ''}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Clock className="size-8 mx-auto mb-2" />
+                  <p>No scheduled tweets</p>
+                  <p className="text-sm">Use the composer tab to schedule your first tweet!</p>
+                </div>
               )}
-              {lastTweetId && (
-                <span className="text-sm">Posted: <a href={`https://x.com/i/web/status/${lastTweetId}`} target="_blank" rel="noreferrer" className="underline">View</a></span>
-              )}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Hello Query Example */}
       <Card>
