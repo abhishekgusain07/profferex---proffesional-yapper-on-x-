@@ -58,19 +58,33 @@ export default function SignIn() {
   };
 
   return (
-    <div className="min-h-screen flex bg-white">
-      {/* Left Side - Form */}
-      <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:flex-none lg:px-20 xl:px-24">
-        <div className="mx-auto w-full max-w-sm lg:w-96">
-          {/* Logo */}
-          <div className="flex items-center mb-8">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">IM</span>
-            </div>
-            <span className="ml-3 text-xl font-semibold text-gray-900">
-              InvoiceManager
-            </span>
-          </div>
+    <section className="bg-gray-100 min-h-screen">
+      <div className="relative isolate">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80"
+        >
+          <div
+            style={{
+              clipPath:
+                'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)',
+            }}
+            className="relative left-[calc(50%-11rem)] aspect-1155/678 w-144.5 -translate-x-1/2 rotate-30 bg-linear-to-tr from-[#ff80b5] to-[#9089fc] opacity-30 sm:left-[calc(50%-30rem)] sm:w-288.75"
+          />
+        </div>
+        
+        <div className="py-24 sm:pt-12 sm:pb-32">
+          <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="max-w-md mx-auto">
+              {/* Logo */}
+              <div className="flex items-center mb-8">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">🐦</span>
+                </div>
+                <span className="ml-3 text-xl font-semibold text-gray-900">
+                  Contentport
+                </span>
+              </div>
 
           <div>
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Sign in</h2>
@@ -78,7 +92,7 @@ export default function SignIn() {
               Don&apos;t have an account?{" "}
               <Link
                 href="/sign-up"
-                className="text-primary hover:text-primary/80 font-medium"
+                className="text-indigo-600 hover:text-indigo-500 font-medium"
               >
                 Sign up
               </Link>
@@ -140,7 +154,7 @@ export default function SignIn() {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="appearance-none block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm"
+                  className="appearance-none block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   placeholder="john.doe@gmail.com"
                 />
               </div>
@@ -177,7 +191,7 @@ export default function SignIn() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="appearance-none block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm"
+                  className="appearance-none block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   placeholder="••••••••"
                 />
               </div>
@@ -191,7 +205,7 @@ export default function SignIn() {
                   type="checkbox"
                   checked={formData.rememberMe}
                   onChange={handleChange}
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
                 <label
                   htmlFor="rememberMe"
@@ -204,7 +218,7 @@ export default function SignIn() {
               <div className="text-sm">
                 <Link
                   href="/forgot-password"
-                  className="text-primary hover:text-primary/80 font-medium"
+                  className="text-indigo-600 hover:text-indigo-500 font-medium"
                 >
                   Forgot Password
                 </Link>
@@ -215,7 +229,7 @@ export default function SignIn() {
               <button
                 type="submit"
                 disabled={loading}
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
               >
                 {loading ? (
                   <>
@@ -320,75 +334,23 @@ export default function SignIn() {
               </div>
             </div>
           </form>
-        </div>
-      </div>
-
-      {/* Right Side - Illustration */}
-      <div className="hidden lg:flex lg:flex-1 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 right-20 w-64 h-64 border-2 border-white/20 rounded-full"></div>
-          <div className="absolute bottom-20 left-20 w-48 h-48 border border-white/10 rounded-full"></div>
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 border border-white/5 rounded-full"></div>
-        </div>
-
-        <div className="relative z-10 flex flex-col justify-center px-12 py-12 text-white">
-          {/* Logo */}
-          <div className="flex items-center mb-12">
-            <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-lg">IM</span>
-            </div>
-            <span className="ml-4 text-2xl font-bold">InvoiceManager</span>
-          </div>
-
-          {/* Main Content */}
-          <div className="max-w-lg">
-            <h1 className="text-4xl font-bold mb-6 leading-tight">
-              Welcome to InvoiceManager
-            </h1>
-            <p className="text-xl text-gray-300 mb-8 leading-relaxed">
-              InvoiceManager helps freelancers and agencies manage their
-              invoices effortlessly. Track payments, automate follow-ups, and
-              get paid faster.
-            </p>
-            <p className="text-gray-400 mb-12">
-              More than 1k+ freelancers joined us, it&apos;s your turn
-            </p>
-
-            {/* Feature Card */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-              <h3 className="text-xl font-semibold mb-3">
-                Get paid 75% faster with smart automation
-              </h3>
-              <p className="text-gray-300 mb-4">
-                Be among the first freelancers to experience the easiest way to
-                manage invoices and get paid on time.
-              </p>
-
-              {/* Mock avatars */}
-              <div className="flex -space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold">
-                  J
-                </div>
-                <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold">
-                  S
-                </div>
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold">
-                  M
-                </div>
-                <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold">
-                  A
-                </div>
-              </div>
             </div>
           </div>
         </div>
-
-        {/* Floating Elements */}
-        <div className="absolute top-24 right-24 w-6 h-6 bg-primary rounded-full animate-pulse"></div>
-        <div className="absolute bottom-32 right-32 w-4 h-4 bg-secondary rounded-full animate-bounce"></div>
-        <div className="absolute top-1/3 right-12 w-8 h-8 bg-white/10 rounded-full animate-pulse"></div>
+        
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-[calc(100%-13rem)] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[calc(100%-30rem)]"
+        >
+          <div
+            style={{
+              clipPath:
+                'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)',
+            }}
+            className="relative left-[calc(50%+3rem)] aspect-1155/678 w-144.5 -translate-x-1/2 bg-linear-to-tr from-[#ff80b5] to-[#9089fc] opacity-30 sm:left-[calc(50%+36rem)] sm:w-288.75"
+          />
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
