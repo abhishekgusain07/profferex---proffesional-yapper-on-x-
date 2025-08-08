@@ -35,9 +35,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Get tweet from database
-    const tweet = await db.query.tweets.findFirst({
-      where: eq(tweets.id, tweetId),
-    })
+    const tweet = await db
+      .select()
+      .from(tweets)
+      .where(eq(tweets.id, tweetId))
+      .limit(1)
+      .then(rows => rows[0] || null)
 
     if (!tweet) {
       return new Response('Tweet not found', { status: 404 })
@@ -49,12 +52,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Get account credentials
-    const twitterAccount = await db.query.account.findFirst({
-      where: and(
+    const twitterAccount = await db
+      .select()
+      .from(account)
+      .where(and(
         eq(account.id, tweet.accountId),
         eq(account.providerId, 'twitter')
-      ),
-    })
+      ))
+      .limit(1)
+      .then(rows => rows[0] || null)
 
     if (!twitterAccount || !twitterAccount.accessToken || !twitterAccount.accessSecret) {
       console.error('Twitter account not found or missing credentials')

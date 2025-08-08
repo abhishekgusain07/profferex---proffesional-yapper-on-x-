@@ -371,14 +371,15 @@ export const twitterRouter = createTRPCRouter({
 
       const accountIds = accounts.map(a => a.id)
 
-      const scheduledTweets = await db.query.tweets.findMany({
-        where: and(
+      const scheduledTweets = await db
+        .select()
+        .from(tweets)
+        .where(and(
           eq(tweets.userId, ctx.user.id),
           eq(tweets.isScheduled, true),
           eq(tweets.isPublished, false)
-        ),
-        orderBy: desc(tweets.scheduledFor),
-      })
+        ))
+        .orderBy(desc(tweets.scheduledFor))
 
       return scheduledTweets.map(tweet => ({
         id: tweet.id,
@@ -405,14 +406,17 @@ export const twitterRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       // Get existing tweet
-      const existingTweet = await db.query.tweets.findFirst({
-        where: and(
+      const existingTweet = await db
+        .select()
+        .from(tweets)
+        .where(and(
           eq(tweets.id, input.tweetId),
           eq(tweets.userId, ctx.user.id),
           eq(tweets.isScheduled, true),
           eq(tweets.isPublished, false)
-        ),
-      })
+        ))
+        .limit(1)
+        .then(rows => rows[0] || null)
 
       if (!existingTweet) {
         throw new Error('Scheduled tweet not found')
@@ -490,14 +494,17 @@ export const twitterRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       // Get existing tweet
-      const existingTweet = await db.query.tweets.findFirst({
-        where: and(
+      const existingTweet = await db
+        .select()
+        .from(tweets)
+        .where(and(
           eq(tweets.id, input.tweetId),
           eq(tweets.userId, ctx.user.id),
           eq(tweets.isScheduled, true),
           eq(tweets.isPublished, false)
-        ),
-      })
+        ))
+        .limit(1)
+        .then(rows => rows[0] || null)
 
       if (!existingTweet) {
         throw new Error('Scheduled tweet not found')
