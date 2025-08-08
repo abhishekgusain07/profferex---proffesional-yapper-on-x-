@@ -94,6 +94,15 @@ export async function POST(req: NextRequest) {
     } catch (error: any) {
       console.error('Failed to post tweet:', error)
       
+      // Log detailed error information for debugging
+      console.error('Tweet posting error details:', {
+        tweetId,
+        accountId: tweet.accountId,
+        error: error.message,
+        stack: error.stack,
+        tweetContent: tweet.content?.substring(0, 50) + '...',
+      })
+      
       // Don't mark as published on Twitter API errors
       // QStash will retry based on your retry configuration
       return new Response(`Failed to post tweet: ${error.message}`, { status: 500 })

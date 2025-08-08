@@ -300,10 +300,17 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Account is missing credentials')
       }
 
-      // Validate scheduling time is in the future
+      // Validate scheduling time is in the future (at least 1 minute)
       const now = Date.now()
-      if (input.scheduledUnix * 1000 <= now) {
-        throw new Error('Schedule time must be in the future')
+      const minimumFutureTime = now + 60000 // 1 minute from now
+      if (input.scheduledUnix * 1000 <= minimumFutureTime) {
+        throw new Error('Schedule time must be at least 1 minute in the future')
+      }
+
+      // Validate scheduling time is not too far in the future (1 year max)
+      const maxFutureTime = now + (365 * 24 * 60 * 60 * 1000) // 1 year
+      if (input.scheduledUnix * 1000 > maxFutureTime) {
+        throw new Error('Schedule time cannot be more than 1 year in the future')
       }
 
       const tweetId = crypto.randomUUID()
@@ -411,10 +418,17 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Scheduled tweet not found')
       }
 
-      // Validate scheduling time is in the future
+      // Validate scheduling time is in the future (at least 1 minute)
       const now = Date.now()
-      if (input.scheduledUnix * 1000 <= now) {
-        throw new Error('Schedule time must be in the future')
+      const minimumFutureTime = now + 60000 // 1 minute from now
+      if (input.scheduledUnix * 1000 <= minimumFutureTime) {
+        throw new Error('Schedule time must be at least 1 minute in the future')
+      }
+
+      // Validate scheduling time is not too far in the future (1 year max)
+      const maxFutureTime = now + (365 * 24 * 60 * 60 * 1000) // 1 year
+      if (input.scheduledUnix * 1000 > maxFutureTime) {
+        throw new Error('Schedule time cannot be more than 1 year in the future')
       }
 
       // Cancel existing QStash job

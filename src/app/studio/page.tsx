@@ -150,6 +150,14 @@ const Studio = () => {
         alert('Please select a valid date and time')
         return
       }
+      
+      // Validate that scheduled time is at least 1 minute in the future
+      const now = Date.now()
+      if (scheduledUnix * 1000 <= now + 60000) {
+        alert('Schedule time must be at least 1 minute in the future')
+        return
+      }
+      
       scheduleTweet.mutate({
         text: values.text.trim(),
         scheduledUnix,
