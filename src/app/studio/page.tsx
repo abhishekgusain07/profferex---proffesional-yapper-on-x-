@@ -46,7 +46,7 @@ const Studio = () => {
   const [media, setMedia] = useState<LocalMedia[]>([])
   const [isScheduling, setIsScheduling] = useState(false)
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined)
-  const [scheduledTime, setScheduledTime] = useState('')
+  const [scheduledTime, setScheduledTime] = useState('09:00')
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
   const form = useForm<TweetFormValues>({
@@ -106,7 +106,7 @@ const Studio = () => {
       form.reset({ text: '' })
       setMedia([])
       setScheduledDate(undefined)
-      setScheduledTime('')
+      setScheduledTime('09:00')
       setIsScheduling(false)
       refetchScheduled()
     },
@@ -126,11 +126,13 @@ const Studio = () => {
   const remaining = useMemo(() => MAX_TWEET_LEN - (form.watch('text')?.length || 0), [form.watch('text')])
   const overLimit = remaining < 0
 
-  // Generate default schedule time (30 minutes from now)
-  const getDefaultScheduleTime = () => {
-    const now = new Date()
-    const defaultTime = addMinutes(now, 30)
-    return format(defaultTime, 'HH:mm')
+  // Initialize scheduling time when toggle is enabled
+  const initializeSchedulingTime = () => {
+    if (!scheduledTime || scheduledTime === '09:00') {
+      const now = new Date()
+      const defaultTime = addMinutes(now, 30)
+      setScheduledTime(format(defaultTime, 'HH:mm'))
+    }
   }
 
   // Combine date and time into Unix timestamp
@@ -362,7 +364,16 @@ const Studio = () => {
                   <Switch
                     id="scheduling-mode"
                     checked={isScheduling}
-                    onCheckedChange={setIsScheduling}
+                    onCheckedChange={(checked) => {
+                      setIsScheduling(checked)
+                      if (checked) {
+                        initializeSchedulingTime()
+                        // Set default date to today if not already set
+                        if (!scheduledDate) {
+                          setScheduledDate(new Date())
+                        }
+                      }
+                    }}
                   />
                   <Label htmlFor="scheduling-mode">Schedule for later</Label>
                 </div>
@@ -398,9 +409,90 @@ const Studio = () => {
                       <Input
                         id="time"
                         type="time"
-                        value={scheduledTime || getDefaultScheduleTime()}
+                        value={scheduledTime}
                         onChange={(e) => setScheduledTime(e.target.value)}
                       />
+                      <div className="flex gap-1 mt-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const now = new Date()
+                            const time5min = addMinutes(now, 5)
+                            setScheduledTime(format(time5min, 'HH:mm'))
+                          }}
+                        >
+                          +5m
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const now = new Date()
+                            const time30min = addMinutes(now, 30)
+                            setScheduledTime(format(time30min, 'HH:mm'))
+                          }}
+                        >
+                          +30m
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const now = new Date()
+                            const time1hr = addMinutes(now, 60)
+                            setScheduledTime(format(time1hr, 'HH:mm'))
+                          }}
+                        >
+                          +1h
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => setScheduledTime('09:00')}
+                        >
+                          9AM
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview of scheduled time (only when scheduling) */}
+                {isScheduling && scheduledDate && scheduledTime && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-sm text-blue-800">
+                      <Clock className="size-4" />
+                      <span>
+                        Will post on{' '}
+                        <strong>
+                          {format(scheduledDate, 'PPP')} at {scheduledTime}
+                        </strong>
+                        {(() => {
+                          const scheduledUnix = getScheduledUnix()
+                          if (scheduledUnix) {
+                            const scheduledDateTime = new Date(scheduledUnix * 1000)
+                            const now = new Date()
+                            const diffMinutes = Math.round((scheduledDateTime.getTime() - now.getTime()) / (1000 * 60))
+                            if (diffMinutes < 60) {
+                              return ` (in ${diffMinutes} minutes)`
+                            } else if (diffMinutes < 1440) {
+                              return ` (in ${Math.round(diffMinutes / 60)} hours)`
+                            } else {
+                              return ` (in ${Math.round(diffMinutes / 1440)} days)`
+                            }
+                          }
+                          return ''
+                        })()}
+                      </span>
                     </div>
                   </div>
                 )}
