@@ -4,10 +4,11 @@ import { redis } from '@/lib/redis'
 import { twitterOAuthClient, createUserTwitterClient } from '@/lib/twitter'
 import { getBaseUrl } from '@/constants/base-url'
 import { db } from '@/db'
-import { account } from '@/db/schema'
+import { account, tweets } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
+import { qstash } from '@/lib/qstash'
 
 export const twitterRouter = createTRPCRouter({
   createLink: protectedProcedure
@@ -262,6 +263,91 @@ export const twitterRouter = createTRPCRouter({
         console.error('Tweet failed', e)
         const message = e?.data?.detail || e?.message || 'Failed to post tweet'
         throw new Error(message)
+      }
+    }),
+
+  schedule: protectedProcedure
+    .input(
+      z.object({
+        text: z
+          .string()
+          .min(1, 'Tweet cannot be empty')
+          .max(280, 'Tweet exceeds 280 characters'),
+        scheduledUnix: z.number().positive('Schedule time must be in the future'),
+        mediaIds: z.array(z.string()).optional(),
+        accountId: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const accounts = await db
+        .select()
+        .from(account)
+        .where(and(eq(account.userId, ctx.user.id), eq(account.providerId, 'twitter')))
+
+      if (!accounts.length) {
+        throw new Error('No connected Twitter accounts')
+      }
+
+      const target = input.accountId
+        ? accounts.find((a) => a.id === input.accountId)
+        : accounts[0]
+
+      if (!target) {
+        throw new Error('Selected account not found')
+      }
+
+      if (!target.accessToken || !target.accessSecret) {
+        throw new Error('Account is missing credentials')
+      }
+
+      // Validate scheduling time is in the future
+      const now = Date.now()
+      if (input.scheduledUnix * 1000 <= now) {
+        throw new Error('Schedule time must be in the future')
+      }
+
+      const tweetId = crypto.randomUUID()
+      const baseUrl = getBaseUrl()
+
+      // Schedule via QStash
+      const { messageId } = await qstash.publishJSON({
+        url: `${baseUrl}/api/scheduled/twitter/post`,
+        body: { tweetId },
+        notBefore: Math.floor(input.scheduledUnix),
+      })
+
+      // Create tweet record in database
+      const [tweet] = await db
+        .insert(tweets)
+        .values({
+          id: tweetId,
+          userId: ctx.user.id,
+          accountId: target.id,
+          content: input.text,
+          mediaIds: input.mediaIds || [],
+          isScheduled: true,
+          scheduledUnix: input.scheduledUnix * 1000,
+          scheduledFor: new Date(input.scheduledUnix * 1000),
+          qstashId: messageId,
+        })
+        .returning()
+
+      if (!tweet) {
+        // Cleanup QStash job if DB insert failed
+        try {
+          await qstash.messages.delete(messageId)
+        } catch (err) {
+          // Log error but don't fail
+          console.error('Failed to cleanup QStash message:', err)
+        }
+        throw new Error('Failed to schedule tweet')
+      }
+
+      return {
+        success: true,
+        tweetId: tweet.id,
+        scheduledFor: tweet.scheduledFor,
+        accountId: target.id,
       }
     }),
 })
