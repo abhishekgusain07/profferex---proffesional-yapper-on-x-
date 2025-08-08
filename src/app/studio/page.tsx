@@ -530,7 +530,7 @@ const Studio = () => {
             <CardContent>
               {scheduledTweets && scheduledTweets.length > 0 ? (
                 <div className="space-y-4">
-                  {scheduledTweets.map((tweet) => (
+                  {scheduledTweets.map((tweet:any) => (
                     <div key={tweet.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-start justify-between">
                         <p className="text-sm flex-1">{tweet.content}</p>
