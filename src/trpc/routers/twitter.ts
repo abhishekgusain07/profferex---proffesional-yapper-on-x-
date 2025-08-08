@@ -5,7 +5,7 @@ import { twitterOAuthClient, createUserTwitterClient } from '@/lib/twitter'
 import { getBaseUrl } from '@/constants/base-url'
 import { db } from '@/db'
 import { account, tweets } from '@/db/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, desc } from 'drizzle-orm'
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { qstash } from '@/lib/qstash'
@@ -348,6 +348,163 @@ export const twitterRouter = createTRPCRouter({
         tweetId: tweet.id,
         scheduledFor: tweet.scheduledFor,
         accountId: target.id,
+      }
+    }),
+
+  getScheduled: protectedProcedure
+    .query(async ({ ctx }) => {
+      const accounts = await db
+        .select()
+        .from(account)
+        .where(and(eq(account.userId, ctx.user.id), eq(account.providerId, 'twitter')))
+
+      if (!accounts.length) {
+        throw new Error('No connected Twitter accounts')
+      }
+
+      const accountIds = accounts.map(a => a.id)
+
+      const scheduledTweets = await db.query.tweets.findMany({
+        where: and(
+          eq(tweets.userId, ctx.user.id),
+          eq(tweets.isScheduled, true),
+          eq(tweets.isPublished, false)
+        ),
+        orderBy: desc(tweets.scheduledFor),
+      })
+
+      return scheduledTweets.map(tweet => ({
+        id: tweet.id,
+        content: tweet.content,
+        scheduledFor: tweet.scheduledFor,
+        scheduledUnix: tweet.scheduledUnix,
+        mediaIds: tweet.mediaIds,
+        accountId: tweet.accountId,
+        createdAt: tweet.createdAt,
+      }))
+    }),
+
+  updateScheduled: protectedProcedure
+    .input(
+      z.object({
+        tweetId: z.string(),
+        text: z
+          .string()
+          .min(1, 'Tweet cannot be empty')
+          .max(280, 'Tweet exceeds 280 characters'),
+        scheduledUnix: z.number().positive('Schedule time must be in the future'),
+        mediaIds: z.array(z.string()).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Get existing tweet
+      const existingTweet = await db.query.tweets.findFirst({
+        where: and(
+          eq(tweets.id, input.tweetId),
+          eq(tweets.userId, ctx.user.id),
+          eq(tweets.isScheduled, true),
+          eq(tweets.isPublished, false)
+        ),
+      })
+
+      if (!existingTweet) {
+        throw new Error('Scheduled tweet not found')
+      }
+
+      // Validate scheduling time is in the future
+      const now = Date.now()
+      if (input.scheduledUnix * 1000 <= now) {
+        throw new Error('Schedule time must be in the future')
+      }
+
+      // Cancel existing QStash job
+      if (existingTweet.qstashId) {
+        try {
+          await qstash.messages.delete(existingTweet.qstashId)
+        } catch (err) {
+          console.error('Failed to cancel existing QStash job:', err)
+          throw new Error('Failed to cancel existing scheduled tweet')
+        }
+      }
+
+      const baseUrl = getBaseUrl()
+
+      // Create new QStash job
+      const { messageId } = await qstash.publishJSON({
+        url: `${baseUrl}/api/scheduled/twitter/post`,
+        body: { tweetId: input.tweetId },
+        notBefore: Math.floor(input.scheduledUnix),
+      })
+
+      // Update tweet in database
+      const [updatedTweet] = await db
+        .update(tweets)
+        .set({
+          content: input.text,
+          mediaIds: input.mediaIds || [],
+          scheduledUnix: input.scheduledUnix * 1000,
+          scheduledFor: new Date(input.scheduledUnix * 1000),
+          qstashId: messageId,
+          updatedAt: new Date(),
+        })
+        .where(eq(tweets.id, input.tweetId))
+        .returning()
+
+      if (!updatedTweet) {
+        // Cleanup new QStash job if DB update failed
+        try {
+          await qstash.messages.delete(messageId)
+        } catch (err) {
+          console.error('Failed to cleanup QStash job:', err)
+        }
+        throw new Error('Failed to update scheduled tweet')
+      }
+
+      return {
+        success: true,
+        tweetId: updatedTweet.id,
+        scheduledFor: updatedTweet.scheduledFor,
+        accountId: updatedTweet.accountId,
+      }
+    }),
+
+  cancelScheduled: protectedProcedure
+    .input(
+      z.object({
+        tweetId: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Get existing tweet
+      const existingTweet = await db.query.tweets.findFirst({
+        where: and(
+          eq(tweets.id, input.tweetId),
+          eq(tweets.userId, ctx.user.id),
+          eq(tweets.isScheduled, true),
+          eq(tweets.isPublished, false)
+        ),
+      })
+
+      if (!existingTweet) {
+        throw new Error('Scheduled tweet not found')
+      }
+
+      // Cancel QStash job
+      if (existingTweet.qstashId) {
+        try {
+          await qstash.messages.delete(existingTweet.qstashId)
+        } catch (err) {
+          console.error('Failed to cancel QStash job:', err)
+          throw new Error('Failed to cancel scheduled tweet')
+        }
+      }
+
+      // Delete tweet from database
+      await db.delete(tweets).where(eq(tweets.id, input.tweetId))
+
+      return {
+        success: true,
+        tweetId: input.tweetId,
       }
     }),
 })
