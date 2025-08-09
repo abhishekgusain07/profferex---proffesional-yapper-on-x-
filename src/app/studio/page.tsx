@@ -14,7 +14,7 @@ import { Loader2, X, Upload, Calendar as CalendarIcon, Clock, Trash2, ChevronDow
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format, addMinutes } from 'date-fns'
+import { format } from 'date-fns'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 const MAX_TWEET_LEN = 280
@@ -41,7 +41,6 @@ const Studio = () => {
   const { data: session, isPending: sessionLoading } = useSession()
   const [lastTweetId, setLastTweetId] = useState<string | null>(null)
   const [media, setMedia] = useState<LocalMedia[]>([])
-  const [isScheduling, setIsScheduling] = useState(false)
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined)
   const [scheduledTime, setScheduledTime] = useState('09:00')
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
@@ -86,7 +85,6 @@ const Studio = () => {
       setMedia([])
       setScheduledDate(undefined)
       setScheduledTime('09:00')
-      setIsScheduling(false)
       refetchScheduled()
     },
   })
@@ -105,14 +103,6 @@ const Studio = () => {
   const remaining = useMemo(() => MAX_TWEET_LEN - (form.watch('text')?.length || 0), [form.watch('text')])
   const overLimit = remaining < 0
 
-  // Initialize scheduling time when toggle is enabled
-  const initializeSchedulingTime = () => {
-    if (!scheduledTime || scheduledTime === '09:00') {
-      const now = new Date()
-      const defaultTime = addMinutes(now, 30)
-      setScheduledTime(format(defaultTime, 'HH:mm'))
-    }
-  }
 
   // Combine date and time into Unix timestamp
   const getScheduledUnix = () => {
@@ -123,30 +113,31 @@ const Studio = () => {
     return Math.floor(combined.getTime() / 1000)
   }
 
-  // Handle form submission (post now or schedule)
+  // Handle form submission (post immediately)
   const handleSubmit = (values: TweetFormValues) => {
-    if (isScheduling) {
-      const scheduledUnix = getScheduledUnix()
-      if (!scheduledUnix) {
-        alert('Please select a valid date and time')
-        return
-      }
-      
-      // Validate that scheduled time is at least 1 minute in the future
-      const now = Date.now()
-      if (scheduledUnix * 1000 <= now + 60000) {
-        alert('Schedule time must be at least 1 minute in the future')
-        return
-      }
-      
-      scheduleTweet.mutate({
-        text: values.text.trim(),
-        scheduledUnix,
-        mediaIds,
-      })
-    } else {
-      postNow.mutate({ text: values.text.trim(), mediaIds })
+    postNow.mutate({ text: values.text.trim(), mediaIds })
+  }
+
+  // Handle scheduling tweets
+  const handleSchedule = (values: TweetFormValues) => {
+    const scheduledUnix = getScheduledUnix()
+    if (!scheduledUnix) {
+      alert('Please select a valid date and time')
+      return
     }
+    
+    // Validate that scheduled time is at least 1 minute in the future
+    const now = Date.now()
+    if (scheduledUnix * 1000 <= now + 60000) {
+      alert('Schedule time must be at least 1 minute in the future')
+      return
+    }
+    
+    scheduleTweet.mutate({
+      text: values.text.trim(),
+      scheduledUnix,
+      mediaIds,
+    })
   }
 
 
@@ -627,11 +618,9 @@ const Studio = () => {
                               />
                             </div>
                             <DuolingoButton
-                              onClick={() => {
-                                setIsScheduling(true)
-                                form.handleSubmit(handleSubmit)()
-                              }}
-                              disabled={scheduleTweet.isPending || !scheduledDate || !scheduledTime}
+                              onClick={form.handleSubmit(handleSchedule)}
+                              disabled={scheduleTweet.isPending || !scheduledDate || !scheduledTime || 
+                                      !form.getValues('text')?.trim() || hasUploading}
                               variant="primary"
                               size="md"
                               className="w-full"
