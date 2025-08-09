@@ -4,19 +4,18 @@ import { useState, useMemo, useRef } from 'react'
 import { trpc } from '@/trpc/client'
 import { useSession, signOut } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
+import DuolingoButton from '@/components/ui/duolingo-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Loader2, X, Upload, Calendar as CalendarIcon, Clock, Trash2, Send, Image as ImageIcon, Sparkles } from 'lucide-react'
+import { Loader2, X, Upload, Calendar as CalendarIcon, Clock, Trash2, ChevronDown } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format, addMinutes } from 'date-fns'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 const MAX_TWEET_LEN = 280
 
@@ -292,125 +291,81 @@ const Studio = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Header */}
-      <div className="border-b bg-white/70 backdrop-blur-sm sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-slate-900">Twitter Studio</h1>
-                <p className="text-sm text-slate-600">Create and schedule your posts</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {!twitterAccounts?.length && (
-                <Button
-                  onClick={async () => {
-                    try {
-                      const res = await createTwitterLink.refetch()
-                      const url = res.data?.url
-                      if (url) window.location.href = url
-                    } catch (e) {}
-                  }}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                >
-                  Connect Twitter
-                </Button>
-              )}
-              <Button variant="ghost" onClick={() => signOut()}>
-                Logout
-              </Button>
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100/80 py-8 px-4">
+      <div className="max-w-xl w-full mx-auto">
+      {/* ContentPort-style Tweet Editor Card */}
+      <div className="relative bg-white p-6 rounded-2xl w-full border border-stone-200 bg-clip-padding group isolate shadow-[0_1px_1px_rgba(0,0,0,0.05),0_4px_6px_rgba(34,42,53,0.04),0_24px_68px_rgba(47,48,55,0.05),0_2px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_2px_2px_rgba(0,0,0,0.06),0_6px_10px_rgba(34,42,53,0.05),0_28px_72px_rgba(47,48,55,0.06),0_3px_4px_rgba(0,0,0,0.05)]">
+        <div className="flex gap-3 relative z-10">
+          {/* Profile Avatar */}
+          <div className="w-12 h-12 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-indigo-50 shadow-sm">
+            <div className="w-6 h-6 text-indigo-600 font-semibold flex items-center justify-center">
+              {session?.user?.name?.charAt(0) || session?.user?.email?.charAt(0) || 'U'}
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Main Content */}
-        <Tabs defaultValue="composer" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8 bg-white/60 backdrop-blur-sm">
-            <TabsTrigger value="composer" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Send className="w-4 h-4 mr-2" />
-              Compose
-            </TabsTrigger>
-            <TabsTrigger value="scheduled" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Clock className="w-4 h-4 mr-2" />
-              Scheduled ({scheduledTweets?.length || 0})
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="composer" className="mt-0">
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center">
-                    <Send className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">Create Post</CardTitle>
-                    <CardDescription className="text-sm">
-                      {isScheduling ? 'Schedule your post for later' : 'Share your thoughts with the world'}
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-                  {/* Tweet Textarea */}
-                  <div className="space-y-3">
-                    <Textarea
-                      {...form.register('text')}
-                      placeholder="What's happening?"
-                      className="min-h-32 text-lg border-slate-200 focus:border-blue-400 focus:ring-blue-400/20 bg-white/50"
-                      maxLength={MAX_TWEET_LEN + 50}
-                    />
-                    
-                    {/* Character Count */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        {/* Media Upload Button */}
-                        <label className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 cursor-pointer group">
-                          <ImageIcon className="w-4 h-4 group-hover:text-blue-600" />
-                          <span>Add photos</span>
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg"
-                            className="hidden"
-                            multiple
-                            onChange={(e) => {
-                              const files = e.target.files
-                              void handleFilesSelected(files)
-                              e.currentTarget.value = ''
-                            }}
-                          />
-                        </label>
-                      </div>
-                      
-                      <div className="flex items-center gap-3">
-                        <span className={`text-sm font-medium ${overLimit ? 'text-red-500' : remaining < 20 ? 'text-amber-500' : 'text-slate-500'}`}>
-                          {remaining}
-                        </span>
-                      </div>
+          <div className="flex-1">
+            {/* Account Info */}
+            <div className="flex items-center gap-1 mb-2">
+              <span className="font-medium text-stone-800">
+                {session?.user?.name || 'Your Name'}
+              </span>
+              <span className="text-stone-500">
+                @{session?.user?.email?.split('@')[0] || 'username'}
+              </span>
+            </div>
+
+            {/* Tweet Textarea */}
+            <div className="text-stone-800 leading-relaxed mb-3">
+              <Textarea
+                {...form.register('text')}
+                placeholder="What's happening?"
+                className="w-full min-h-16 resize-none text-base leading-relaxed text-stone-800 border-none p-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none bg-transparent"
+                maxLength={MAX_TWEET_LEN + 50}
+              />
+            </div>
+
+            {/* Media Files Display */}
+            {media.length > 0 && (
+              <div className="mt-3">
+                {/* Single Image */}
+                {media.length === 1 && (
+                  <div className="relative group">
+                    <div className="relative overflow-hidden rounded-2xl border border-stone-200">
+                      <img
+                        src={media[0]?.previewUrl}
+                        alt="Upload preview"
+                        className="w-full max-h-[510px] object-cover"
+                      />
+                      <button
+                        type="button"
+                        className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
+                        onClick={() => removeMedia(media[0]?.id)}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      {media[0]?.uploading && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <div className="flex items-center gap-2 text-white text-sm">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>{Math.round(media[0].progress || 0)}%</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
+                )}
 
-                  {/* Media Preview */}
-                  {media.length > 0 && (
-                    <div className="grid grid-cols-2 gap-3">
-                      {media.map((m) => (
-                        <div key={m.id} className="relative aspect-video border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
-                          {m.mediaType === 'image' || m.mediaType === 'gif' ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={m.previewUrl} alt="preview" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="w-8 h-8 text-slate-400" />
-                            </div>
-                          )}
+                {/* Two Images */}
+                {media.length === 2 && (
+                  <div className="grid grid-cols-2 gap-0.5 rounded-2xl overflow-hidden border border-stone-200">
+                    {media.map((m) => (
+                      <div key={m.id} className="relative group">
+                        <div className="relative overflow-hidden h-[254px]">
+                          <img
+                            src={m.previewUrl}
+                            alt="Upload preview"
+                            className="w-full h-full object-cover"
+                          />
                           <button
                             type="button"
                             className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
@@ -418,273 +373,304 @@ const Studio = () => {
                           >
                             <X className="w-3 h-3" />
                           </button>
-                          {(m.uploading || m.error) && (
+                          {m.uploading && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                              {m.uploading ? (
-                                <div className="flex items-center gap-2 text-white text-sm">
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  <span>{Math.round(m.progress)}%</span>
-                                </div>
-                              ) : (
-                                <span className="text-red-200 text-xs px-2">{m.error}</span>
-                              )}
+                              <div className="flex items-center gap-2 text-white text-sm">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>{Math.round(m.progress || 0)}%</span>
+                              </div>
                             </div>
                           )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Schedule Toggle */}
-                  <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-lg border border-slate-200">
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        id="scheduling-mode"
-                        checked={isScheduling}
-                        onCheckedChange={(checked) => {
-                          setIsScheduling(checked)
-                          if (checked) {
-                            initializeSchedulingTime()
-                            if (!scheduledDate) {
-                              setScheduledDate(new Date())
-                            }
-                          }
-                        }}
-                      />
-                      <Label htmlFor="scheduling-mode" className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        Schedule for later
-                      </Label>
-                    </div>
-                  </div>
-
-                  {/* Date and Time Picker */}
-                  {isScheduling && (
-                    <div className="space-y-4 p-4 bg-blue-50/50 rounded-lg border border-blue-200">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">Date</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start text-left font-normal bg-white"
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {scheduledDate ? format(scheduledDate, 'PPP') : <span>Pick a date</span>}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                              <Calendar
-                                mode="single"
-                                selected={scheduledDate}
-                                onSelect={setScheduledDate}
-                                disabled={(date) => date < new Date()}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="time" className="text-sm font-medium">Time</Label>
-                          <Input
-                            id="time"
-                            type="time"
-                            value={scheduledTime}
-                            onChange={(e) => setScheduledTime(e.target.value)}
-                            className="bg-white"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Quick Time Buttons */}
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { label: '+5min', minutes: 5 },
-                          { label: '+30min', minutes: 30 },
-                          { label: '+1hr', minutes: 60 },
-                          { label: '9AM', time: '09:00' },
-                        ].map((preset) => (
-                          <Button
-                            key={preset.label}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-3 text-xs bg-white/50"
-                            onClick={() => {
-                              if (preset.time) {
-                                setScheduledTime(preset.time)
-                              } else if (preset.minutes) {
-                                const now = new Date()
-                                const newTime = addMinutes(now, preset.minutes)
-                                setScheduledTime(format(newTime, 'HH:mm'))
-                              }
-                            }}
-                          >
-                            {preset.label}
-                          </Button>
-                        ))}
-                      </div>
-
-                      {/* Schedule Preview */}
-                      {scheduledDate && scheduledTime && (
-                        <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-100 p-3 rounded-lg">
-                          <Clock className="w-4 h-4" />
-                          <span>
-                            Will post on <strong>{format(scheduledDate, 'PPP')} at {scheduledTime}</strong>
-                            {(() => {
-                              const scheduledUnix = getScheduledUnix()
-                              if (scheduledUnix) {
-                                const scheduledDateTime = new Date(scheduledUnix * 1000)
-                                const now = new Date()
-                                const diffMinutes = Math.round((scheduledDateTime.getTime() - now.getTime()) / (1000 * 60))
-                                if (diffMinutes < 60) {
-                                  return ` (in ${diffMinutes} minutes)`
-                                } else if (diffMinutes < 1440) {
-                                  return ` (in ${Math.round(diffMinutes / 60)} hours)`
-                                } else {
-                                  return ` (in ${Math.round(diffMinutes / 1440)} days)`
-                                }
-                              }
-                              return ''
-                            })()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Connection Status */}
-                  <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
-                    {accountsLoading ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Checking accounts...</span>
-                      </div>
-                    ) : twitterAccounts && twitterAccounts.length > 0 ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Connected to {twitterAccounts.length} Twitter account{twitterAccounts.length > 1 ? 's' : ''}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                        <span>No Twitter accounts connected</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-3 pt-4 border-t border-slate-200">
-                    <Button
-                      type="submit"
-                      disabled={
-                        (isScheduling ? scheduleTweet.isPending : postNow.isPending) ||
-                        overLimit ||
-                        !form.getValues('text')?.trim() ||
-                        !twitterAccounts?.length ||
-                        hasUploading ||
-                        (isScheduling && (!scheduledDate || !scheduledTime))
-                      }
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"
-                    >
-                      {(isScheduling ? scheduleTweet.isPending : postNow.isPending) ? (
-                        <span className="flex items-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          {isScheduling ? 'Scheduling...' : 'Posting...'}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          {isScheduling ? <Clock className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-                          {isScheduling ? 'Schedule Post' : 'Post Now'}
-                        </span>
-                      )}
-                    </Button>
-
-                    {(postNow.error || scheduleTweet.error) && (
-                      <span className="text-sm text-red-600">
-                        {postNow.error?.message || scheduleTweet.error?.message}
-                      </span>
-                    )}
-
-                    {lastTweetId && (
-                      <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>
-                          Posted! <a href={`https://x.com/i/web/status/${lastTweetId}`} target="_blank" rel="noreferrer" className="underline font-medium">View on X</a>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="scheduled" className="mt-0">
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-amber-100 to-orange-100 rounded-full flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">Scheduled Posts</CardTitle>
-                    <CardDescription>Manage your upcoming posts</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {scheduledTweets && scheduledTweets.length > 0 ? (
-                  <div className="space-y-4">
-                    {scheduledTweets.map((tweet: any) => (
-                      <div key={tweet.id} className="p-4 bg-slate-50/50 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 space-y-2">
-                            <p className="text-slate-900 leading-relaxed">{tweet.content}</p>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                              <Clock className="w-3 h-3" />
-                              <span>
-                                {tweet.scheduledFor ? format(new Date(tweet.scheduledFor), 'PPP p') : 'Unknown time'}
-                              </span>
-                            </div>
-                            {tweet.mediaIds && tweet.mediaIds.length > 0 && (
-                              <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <ImageIcon className="w-3 h-3" />
-                                <span>{tweet.mediaIds.length} photo{tweet.mediaIds.length > 1 ? 's' : ''}</span>
-                              </div>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => cancelScheduled.mutate({ tweetId: tweet.id })}
-                            disabled={cancelScheduled.isPending}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            {cancelScheduled.isPending ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <div className="text-center py-16">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Clock className="w-8 h-8 text-slate-400" />
+                )}
+
+                {/* Three Images */}
+                {media.length === 3 && (
+                  <div className="grid grid-cols-2 gap-0.5 rounded-2xl overflow-hidden border border-stone-200 h-[254px]">
+                    <div className="relative group">
+                      <div className="relative overflow-hidden h-full">
+                        <img
+                          src={media[0]?.previewUrl}
+                          alt="Upload preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
+                          onClick={() => removeMedia(media[0]?.id)}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                    <h3 className="text-lg font-medium text-slate-900 mb-2">No scheduled posts</h3>
-                    <p className="text-slate-600 mb-6">Create your first scheduled post using the composer!</p>
+                    <div className="grid grid-rows-2 gap-0.5">
+                      {media.slice(1).map((m) => (
+                        <div key={m.id} className="relative group">
+                          <div className="relative overflow-hidden h-full">
+                            <img
+                              src={m.previewUrl}
+                              alt="Upload preview"
+                              className="w-full h-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
+                              onClick={() => removeMedia(m.id)}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+
+                {/* Four Images */}
+                {media.length === 4 && (
+                  <div className="grid grid-cols-2 grid-rows-2 gap-0.5 rounded-2xl overflow-hidden border border-stone-200 h-[254px]">
+                    {media.map((m) => (
+                      <div key={m.id} className="relative group">
+                        <div className="relative overflow-hidden h-full">
+                          <img
+                            src={m.previewUrl}
+                            alt="Upload preview"
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
+                            onClick={() => removeMedia(m.id)}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bottom Toolbar */}
+            <div className="mt-3 pt-3 border-t border-stone-200 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 bg-stone-50 p-1.5 rounded-xl border border-stone-200 shadow-sm">
+                {/* Media Upload Button */}
+                <DuolingoButton
+                  variant="secondary"
+                  size="icon"
+                  className="rounded-md p-2 h-auto w-auto"
+                  type="button"
+                  onClick={() => document.getElementById('media-upload')?.click()}
+                >
+                  <Upload className="w-4 h-4" />
+                </DuolingoButton>
+                <input
+                  id="media-upload"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => {
+                    const files = e.target.files
+                    void handleFilesSelected(files)
+                    e.currentTarget.value = ''
+                  }}
+                />
+
+                {/* Clear Button */}
+                <DuolingoButton
+                  variant="secondary"
+                  size="icon"
+                  className="rounded-md p-2 h-auto w-auto"
+                  onClick={() => {
+                    form.reset()
+                    setMedia([])
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </DuolingoButton>
+
+                <div className="w-px h-4 bg-stone-300 mx-1.5" />
+
+                {/* Character Counter */}
+                <div className="flex items-center gap-2">
+                  <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
+                    <circle
+                      cx="16"
+                      cy="16"
+                      r="10"
+                      fill="none"
+                      stroke={overLimit ? '#ef4444' : remaining < 20 ? '#f59e0b' : '#e5e7eb'}
+                      strokeWidth="2"
+                    />
+                    <circle
+                      cx="16"
+                      cy="16"
+                      r="10"
+                      fill="none"
+                      stroke={overLimit ? '#ef4444' : '#3b82f6'}
+                      strokeWidth="2"
+                      strokeDasharray={`${62.83 * Math.min(1, (MAX_TWEET_LEN - remaining) / MAX_TWEET_LEN)} 62.83`}
+                      className="transition-all duration-200"
+                    />
+                  </svg>
+                  {remaining < 20 && (
+                    <span className={`text-sm font-medium ${overLimit ? 'text-red-500' : 'text-amber-500'}`}>
+                      {remaining}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                {!twitterAccounts?.length ? (
+                  <DuolingoButton
+                    onClick={async () => {
+                      try {
+                        const res = await createTwitterLink.refetch()
+                        const url = res.data?.url
+                        if (url) window.location.href = url
+                      } catch (e) {}
+                    }}
+                    variant="primary"
+                    size="md"
+                    className="h-11 w-auto"
+                  >
+                    Connect Twitter
+                  </DuolingoButton>
+                ) : (
+                  <>
+                    {/* Post Button */}
+                    <DuolingoButton
+                      onClick={form.handleSubmit(handleSubmit)}
+                      disabled={
+                        postNow.isPending ||
+                        overLimit ||
+                        !form.getValues('text')?.trim() ||
+                        hasUploading
+                      }
+                      variant="primary"
+                      size="md"
+                      className="h-11 w-auto bg-stone-600 hover:bg-stone-500 border-stone-700 shadow-[0_3px_0_#44403c]"
+                      loading={postNow.isPending}
+                    >
+                      {postNow.isPending ? 'Posting...' : 'Post'}
+                    </DuolingoButton>
+
+                    {/* Queue/Schedule Buttons */}
+                    <div className="flex">
+                      <DuolingoButton
+                        onClick={() => {
+                          // Add to queue logic
+                          const content = form.getValues('text')
+                          if (content?.trim()) {
+                            console.log('Add to queue:', content)
+                          }
+                        }}
+                        disabled={hasUploading}
+                        variant="primary"
+                        size="md"
+                        className="h-11 px-3 rounded-r-none border-r-0 w-auto"
+                      >
+                        <Clock className="w-4 h-4 mr-2" />
+                        Queue
+                      </DuolingoButton>
+
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <DuolingoButton
+                            disabled={hasUploading}
+                            variant="primary"
+                            size="icon"
+                            className="h-11 w-14 rounded-l-none border-l"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </DuolingoButton>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label>Date</Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start text-left font-normal"
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {scheduledDate ? format(scheduledDate, 'PPP') : <span>Pick a date</span>}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                  <Calendar
+                                    mode="single"
+                                    selected={scheduledDate}
+                                    onSelect={setScheduledDate}
+                                    disabled={(date) => date < new Date()}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="time">Time</Label>
+                              <Input
+                                id="time"
+                                type="time"
+                                value={scheduledTime}
+                                onChange={(e) => setScheduledTime(e.target.value)}
+                              />
+                            </div>
+                            <DuolingoButton
+                              onClick={() => {
+                                setIsScheduling(true)
+                                form.handleSubmit(handleSubmit)()
+                              }}
+                              disabled={scheduleTweet.isPending || !scheduledDate || !scheduledTime}
+                              variant="primary"
+                              size="md"
+                              className="w-full"
+                              loading={scheduleTweet.isPending}
+                            >
+                              {scheduleTweet.isPending ? 'Scheduling...' : 'Schedule Tweet'}
+                            </DuolingoButton>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Success Message */}
+      {lastTweetId && (
+        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2 text-emerald-800">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-sm"></div>
+            <span className="text-sm font-medium">
+              Posted! <a href={`https://x.com/i/web/status/${lastTweetId}`} target="_blank" rel="noreferrer" className="underline text-emerald-600 hover:text-emerald-700 transition-colors">View on X</a>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Error Messages */}
+      {(postNow.error || scheduleTweet.error) && (
+        <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-2xl shadow-sm">
+          <span className="text-red-600 text-sm font-medium">
+            {postNow.error?.message || scheduleTweet.error?.message}
+          </span>
+        </div>
+      )}
       </div>
     </div>
   )
