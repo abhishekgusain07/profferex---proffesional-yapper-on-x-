@@ -146,7 +146,7 @@ describe('Twitter Scheduling tRPC Routes', () => {
           scheduledUnix: farFutureTime,
           mediaIds: [],
         })
-      ).rejects.toThrow('Schedule time cannot be more than 1 year in the future')
+      ).rejects.toThrow('Schedule time cannot be more than 10 years in the future')
     })
 
     it('should reject empty tweet text', async () => {

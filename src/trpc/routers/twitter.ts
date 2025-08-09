@@ -307,10 +307,10 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Schedule time must be at least 1 minute in the future')
       }
 
-      // Validate scheduling time is not too far in the future (1 year max)
-      const maxFutureTime = now + (365 * 24 * 60 * 60 * 1000) // 1 year
+      // Validate scheduling time is reasonable (10 years max to prevent abuse)
+      const maxFutureTime = now + (10 * 365 * 24 * 60 * 60 * 1000) // 10 years
       if (input.scheduledUnix * 1000 > maxFutureTime) {
-        throw new Error('Schedule time cannot be more than 1 year in the future')
+        throw new Error('Schedule time cannot be more than 10 years in the future')
       }
 
       const tweetId = crypto.randomUUID()
@@ -429,10 +429,10 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Schedule time must be at least 1 minute in the future')
       }
 
-      // Validate scheduling time is not too far in the future (1 year max)
-      const maxFutureTime = now + (365 * 24 * 60 * 60 * 1000) // 1 year
+      // Validate scheduling time is reasonable (10 years max to prevent abuse)
+      const maxFutureTime = now + (10 * 365 * 24 * 60 * 60 * 1000) // 10 years
       if (input.scheduledUnix * 1000 > maxFutureTime) {
-        throw new Error('Schedule time cannot be more than 1 year in the future')
+        throw new Error('Schedule time cannot be more than 10 years in the future')
       }
 
       // Cancel existing QStash job
