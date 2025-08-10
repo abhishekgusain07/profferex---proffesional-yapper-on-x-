@@ -73,16 +73,34 @@ export const twitterRouter = createTRPCRouter({
 
   getAccounts: protectedProcedure
     .query(async ({ ctx }) => {
+      console.log('📋 Fetching accounts for user:', ctx.user.id)
+      
       // Try to get accounts from cache first
       const cachedAccounts = await AccountCache.getUserAccounts(ctx.user.id)
       const activeAccountId = await AccountCache.getActiveAccountId(ctx.user.id)
+      
+      console.log('📋 Cache results:', {
+        cachedAccountsCount: cachedAccounts.length,
+        activeAccountId,
+        cachedAccountIds: cachedAccounts.map(a => ({ id: a.accountId, username: a.username }))
+      })
 
       if (cachedAccounts.length > 0) {
         // Return cached data with active account marked
-        return cachedAccounts.map(account => ({
+        const mappedAccounts = cachedAccounts.map(account => ({
           ...account,
           isActive: account.accountId === activeAccountId,
         }))
+        
+        console.log('📋 Mapped accounts with active status:', 
+          mappedAccounts.map(a => ({ 
+            accountId: a.accountId, 
+            username: a.username, 
+            isActive: a.isActive 
+          }))
+        )
+        
+        return mappedAccounts
       }
 
       // Fallback to database if cache is empty
@@ -150,6 +168,11 @@ export const twitterRouter = createTRPCRouter({
       accountId: z.string().min(1, 'Account ID is required'),
     }))
     .mutation(async ({ ctx, input }) => {
+      console.log('🔄 Setting active account:', {
+        userId: ctx.user.id,
+        requestedAccountId: input.accountId,
+      })
+
       // Verify the account exists and belongs to the current user
       const accountExists = await db
         .select({ id: account.id, accountId: account.accountId })
@@ -163,11 +186,25 @@ export const twitterRouter = createTRPCRouter({
         .then(rows => rows[0] || null)
 
       if (!accountExists) {
+        console.error('❌ Account not found:', {
+          requestedAccountId: input.accountId,
+          userId: ctx.user.id,
+        })
         throw new Error('Account not found or you do not have permission to access it')
       }
 
+      console.log('✅ Account verified:', accountExists)
+
       // Set as active account in cache
       await AccountCache.setActiveAccount(ctx.user.id, input.accountId)
+
+      // Verify the active account was set correctly
+      const verifyActiveAccount = await AccountCache.getActiveAccountId(ctx.user.id)
+      console.log('✅ Active account set and verified:', {
+        setAccountId: input.accountId,
+        retrievedActiveId: verifyActiveAccount,
+        matches: verifyActiveAccount === input.accountId,
+      })
 
       return {
         success: true,
@@ -434,9 +471,40 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('No connected Twitter accounts')
       }
 
-      const target = input.accountId
-        ? accounts.find((a) => a.id === input.accountId)
-        : accounts[0]
+      console.log('🔍 Selecting account for posting:', {
+        userId: ctx.user.id,
+        providedAccountId: input.accountId,
+        availableAccounts: accounts.length,
+      })
+
+      let target: typeof accounts[0] | undefined
+
+      if (input.accountId) {
+        // Use specific account if provided
+        target = accounts.find((a) => a.id === input.accountId)
+        console.log('📌 Using provided account:', { accountId: input.accountId, found: !!target })
+      } else {
+        // Use active account if no specific account provided
+        const activeAccountId = await AccountCache.getActiveAccountId(ctx.user.id)
+        console.log('🎯 Looking for active account:', { activeAccountId })
+        
+        if (activeAccountId) {
+          target = accounts.find((a) => a.accountId === activeAccountId)
+          console.log('✅ Found active account:', { 
+            activeAccountId, 
+            foundAccount: target ? { id: target.id, accountId: target.accountId } : null 
+          })
+        }
+        
+        // Fallback to first account if no active account found
+        if (!target) {
+          target = accounts[0]
+          console.log('⚠️ Using fallback (first account):', { 
+            accountId: target.accountId,
+            reason: activeAccountId ? 'active account not found in DB' : 'no active account set'
+          })
+        }
+      }
 
       if (!target) {
         throw new Error('Selected account not found')
@@ -485,9 +553,40 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('No connected Twitter accounts')
       }
 
-      const target = input.accountId
-        ? accounts.find((a) => a.id === input.accountId)
-        : accounts[0]
+      console.log('🔍 Selecting account for scheduling:', {
+        userId: ctx.user.id,
+        providedAccountId: input.accountId,
+        availableAccounts: accounts.length,
+      })
+
+      let target: typeof accounts[0] | undefined
+
+      if (input.accountId) {
+        // Use specific account if provided
+        target = accounts.find((a) => a.id === input.accountId)
+        console.log('📌 Using provided account:', { accountId: input.accountId, found: !!target })
+      } else {
+        // Use active account if no specific account provided
+        const activeAccountId = await AccountCache.getActiveAccountId(ctx.user.id)
+        console.log('🎯 Looking for active account:', { activeAccountId })
+        
+        if (activeAccountId) {
+          target = accounts.find((a) => a.accountId === activeAccountId)
+          console.log('✅ Found active account:', { 
+            activeAccountId, 
+            foundAccount: target ? { id: target.id, accountId: target.accountId } : null 
+          })
+        }
+        
+        // Fallback to first account if no active account found
+        if (!target) {
+          target = accounts[0]
+          console.log('⚠️ Using fallback (first account):', { 
+            accountId: target.accountId,
+            reason: activeAccountId ? 'active account not found in DB' : 'no active account set'
+          })
+        }
+      }
 
       if (!target) {
         throw new Error('Selected account not found')

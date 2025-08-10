@@ -46,12 +46,13 @@ const AccountsPage = () => {
   })
 
   const setActiveAccountMutation = trpc.twitter.setActiveAccount.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('✅ Account switch successful:', data)
       refetchAccounts()
       setConnectionMessage({ type: 'success', message: 'Account switched successfully!' })
     },
     onError: (error) => {
-      console.error('Failed to switch account:', error)
+      console.error('❌ Failed to switch account:', error)
       setConnectionMessage({ type: 'error', message: 'Failed to switch account. Please try again.' })
     },
     onSettled: () => {
@@ -175,12 +176,14 @@ const AccountsPage = () => {
   }
 
   const handleSwitchAccount = async (accountId: string) => {
+    console.log('🔄 Switching to account:', accountId)
     setSwitchingAccount(accountId)
     try {
-      await setActiveAccountMutation.mutateAsync({ accountId })
+      const result = await setActiveAccountMutation.mutateAsync({ accountId })
+      console.log('✅ Switch account mutation result:', result)
     } catch (error) {
       // Error handling is done in the mutation callbacks
-      console.error('Switch account failed:', error)
+      console.error('❌ Switch account failed:', error)
     }
   }
 

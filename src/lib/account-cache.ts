@@ -35,15 +35,33 @@ export class AccountCache {
     const accountsListKey = this.getUserAccountsListKey(userId)
     const usernameKey = this.getUserAccountByUsernameKey(userId, accountData.username)
 
-    await Promise.all([
-      // Cache individual account
-      redis.setex(accountKey, 3600, JSON.stringify(accountData)), // 1 hour TTL
-      // Add to user's account list
-      redis.sadd(accountsListKey, accountData.accountId),
-      redis.expire(accountsListKey, 3600),
-      // Cache username lookup for deduplication
-      redis.setex(usernameKey, 3600, accountData.accountId),
-    ])
+    console.log('💾 Caching account:', {
+      userId,
+      accountId: accountData.accountId,
+      username: accountData.username,
+      keys: {
+        accountKey,
+        accountsListKey,
+        usernameKey,
+      }
+    })
+
+    try {
+      await Promise.all([
+        // Cache individual account
+        redis.setex(accountKey, 3600, JSON.stringify(accountData)), // 1 hour TTL
+        // Add to user's account list
+        redis.sadd(accountsListKey, accountData.accountId),
+        redis.expire(accountsListKey, 3600),
+        // Cache username lookup for deduplication
+        redis.setex(usernameKey, 3600, accountData.accountId),
+      ])
+      
+      console.log('✅ Account cached successfully:', accountData.accountId)
+    } catch (error) {
+      console.error('❌ Failed to cache account:', error)
+      throw error
+    }
   }
 
   // Get cached account data
@@ -68,15 +86,44 @@ export class AccountCache {
   // Get all cached accounts for user
   static async getUserAccounts(userId: string): Promise<CachedAccountData[]> {
     const accountsListKey = this.getUserAccountsListKey(userId)
+    
+    console.log('🔍 Getting cached accounts for user:', {
+      userId,
+      accountsListKey,
+    })
+    
     const accountIds = await redis.smembers(accountsListKey)
     
-    if (!accountIds.length) return []
+    console.log('📋 Account IDs from cache:', {
+      accountIds,
+      count: accountIds.length,
+    })
+    
+    if (!accountIds.length) {
+      console.log('❌ No cached account IDs found')
+      return []
+    }
 
     const accounts = await Promise.all(
-      accountIds.map(accountId => this.getAccount(userId, accountId))
+      accountIds.map(async (accountId) => {
+        console.log('🔍 Retrieving cached account:', accountId)
+        const account = await this.getAccount(userId, accountId)
+        console.log('📄 Retrieved account:', { 
+          accountId, 
+          found: !!account,
+          username: account?.username 
+        })
+        return account
+      })
     )
 
-    return accounts.filter((account): account is CachedAccountData => account !== null)
+    const filteredAccounts = accounts.filter((account): account is CachedAccountData => account !== null)
+    console.log('✅ Filtered cached accounts:', {
+      totalFetched: accounts.length,
+      validAccounts: filteredAccounts.length,
+    })
+
+    return filteredAccounts
   }
 
   // Check if username already exists for user (for deduplication)
@@ -89,6 +136,25 @@ export class AccountCache {
   static async setActiveAccount(userId: string, accountId: string): Promise<void> {
     const activeAccountKey = this.getActiveAccountKey(userId)
     await redis.setex(activeAccountKey, 3600, accountId)
+    
+    // Also update cached accounts to reflect the new active state
+    const accountsListKey = this.getUserAccountsListKey(userId)
+    const allAccountIds = await redis.smembers(accountsListKey)
+    
+    // Update all cached accounts' isActive status
+    const updatePromises = allAccountIds.map(async (accId) => {
+      const cachedAccount = await this.getAccount(userId, accId)
+      if (cachedAccount) {
+        const updatedAccount = {
+          ...cachedAccount,
+          isActive: accId === accountId
+        }
+        const accountKey = this.getUserAccountKey(userId, accId)
+        await redis.setex(accountKey, 3600, JSON.stringify(updatedAccount))
+      }
+    })
+    
+    await Promise.all(updatePromises)
   }
 
   // Get active account ID
