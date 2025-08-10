@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Loader2, Plus, Users, Settings, ExternalLink, Trash2, CheckCircle, AlertTriangle } from 'lucide-react'
-import { useState } from 'react'
+import { Loader2, Plus, Users, Settings, ExternalLink, Trash2, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 const AccountsPage = () => {
@@ -16,6 +16,8 @@ const AccountsPage = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [accountToDelete, setAccountToDelete] = useState<{ id: string; name: string } | null>(null)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [switchingAccount, setSwitchingAccount] = useState<string | null>(null)
+  const [connectionMessage, setConnectionMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null)
 
   const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
     undefined,
@@ -39,6 +41,20 @@ const AccountsPage = () => {
     },
     onSettled: () => {
       setDeletingAccount(false)
+    },
+  })
+
+  const setActiveAccountMutation = trpc.twitter.setActiveAccount.useMutation({
+    onSuccess: () => {
+      refetchAccounts()
+      setConnectionMessage({ type: 'success', message: 'Account switched successfully!' })
+    },
+    onError: (error) => {
+      console.error('Failed to switch account:', error)
+      setConnectionMessage({ type: 'error', message: 'Failed to switch account. Please try again.' })
+    },
+    onSettled: () => {
+      setSwitchingAccount(null)
     },
   })
 
@@ -82,6 +98,57 @@ const AccountsPage = () => {
     setAccountToDelete(null)
   }
 
+  const handleSwitchAccount = async (accountId: string) => {
+    setSwitchingAccount(accountId)
+    try {
+      await setActiveAccountMutation.mutateAsync({ accountId })
+    } catch (error) {
+      // Error handling is done in the mutation callbacks
+      console.error('Switch account failed:', error)
+    }
+  }
+
+  // Check URL parameters for connection status
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('account_connected') === 'true') {
+      setConnectionMessage({ type: 'success', message: 'Twitter account connected successfully!' })
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (urlParams.get('error') === 'account_already_connected') {
+      setConnectionMessage({ type: 'error', message: 'This Twitter account is already connected to your profile.' })
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (urlParams.get('error')) {
+      const error = urlParams.get('error')
+      let message = 'Failed to connect Twitter account. Please try again.'
+      if (error === 'expired_or_invalid_state') {
+        message = 'Connection expired. Please try connecting again.'
+      } else if (error === 'user_not_found') {
+        message = 'Session expired. Please log in again.'
+      }
+      setConnectionMessage({ type: 'error', message })
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+
+    // Auto-hide messages after 5 seconds
+    if (connectionMessage) {
+      const timer = setTimeout(() => {
+        setConnectionMessage(null)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [])
+
+  // Auto-hide connection messages after 5 seconds
+  useEffect(() => {
+    if (connectionMessage) {
+      const timer = setTimeout(() => {
+        setConnectionMessage(null)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [connectionMessage])
+
   if (sessionLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -122,6 +189,24 @@ const AccountsPage = () => {
         </div>
 
         <div className="space-y-6">
+          {/* Connection Status Message */}
+          {connectionMessage && (
+            <div className={`p-4 rounded-lg border ${
+              connectionMessage.type === 'success' 
+                ? 'bg-green-50 border-green-200 text-green-800' 
+                : 'bg-red-50 border-red-200 text-red-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                {connectionMessage.type === 'success' ? (
+                  <CheckCircle className="w-4 h-4" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4" />
+                )}
+                <span className="text-sm font-medium">{connectionMessage.message}</span>
+              </div>
+            </div>
+          )}
+
           {/* Connected Accounts */}
           <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
             <CardHeader>
@@ -180,10 +265,9 @@ const AccountsPage = () => {
                           <h3 className="font-medium text-slate-900">
                             {account.displayName || account.username || `Account ${account.accountId.slice(0, 8)}`}
                           </h3>
-                          {account.isActive && (
-                            <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Active
+                          {account.verified && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200 px-2 py-0.5 text-xs">
+                              Verified
                             </Badge>
                           )}
                         </div>
@@ -192,9 +276,32 @@ const AccountsPage = () => {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-700">
-                          <Settings className="w-4 h-4" />
-                        </Button>
+                        {account.isActive ? (
+                          <Badge className="bg-blue-100 text-blue-700 border-blue-200 px-3 py-1">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Active
+                          </Badge>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleSwitchAccount(account.accountId)}
+                            disabled={switchingAccount === account.accountId}
+                            className="text-slate-600 hover:text-slate-700 border-slate-300"
+                          >
+                            {switchingAccount === account.accountId ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                Switching...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="w-3 h-3 mr-1" />
+                                Make Active
+                              </>
+                            )}
+                          </Button>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm" 
