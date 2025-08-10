@@ -113,6 +113,111 @@ export const twitterRouter = createTRPCRouter({
       return enrichedAccounts
     }),
 
+  setActiveAccount: protectedProcedure
+    .input(z.object({
+      accountId: z.string().min(1, 'Account ID is required'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify the account exists and belongs to the current user
+      const accountExists = await db
+        .select({ id: account.id, accountId: account.accountId })
+        .from(account)
+        .where(and(
+          eq(account.accountId, input.accountId),
+          eq(account.userId, ctx.user.id),
+          eq(account.providerId, 'twitter')
+        ))
+        .limit(1)
+        .then(rows => rows[0] || null)
+
+      if (!accountExists) {
+        throw new Error('Account not found or you do not have permission to access it')
+      }
+
+      // Set as active account in cache
+      await AccountCache.setActiveAccount(ctx.user.id, input.accountId)
+
+      return {
+        success: true,
+        activeAccountId: input.accountId,
+      }
+    }),
+
+  getActiveAccount: protectedProcedure
+    .query(async ({ ctx }) => {
+      const activeAccountId = await AccountCache.getActiveAccountId(ctx.user.id)
+      
+      if (!activeAccountId) {
+        return null
+      }
+
+      // Get the active account details from cache
+      const activeAccount = await AccountCache.getAccount(ctx.user.id, activeAccountId)
+      
+      if (!activeAccount) {
+        // If not in cache, try to get from database and cache it
+        const dbAccount = await db
+          .select()
+          .from(account)
+          .where(and(
+            eq(account.accountId, activeAccountId),
+            eq(account.userId, ctx.user.id),
+            eq(account.providerId, 'twitter')
+          ))
+          .limit(1)
+          .then(rows => rows[0] || null)
+
+        if (!dbAccount) {
+          // Active account no longer exists, clear it
+          await AccountCache.setActiveAccount(ctx.user.id, '')
+          return null
+        }
+
+        // Try to fetch fresh profile data and cache it
+        let profileData = {
+          username: `user_${dbAccount.accountId}`,
+          displayName: `user_${dbAccount.accountId}`,
+          profileImage: '',
+          verified: false,
+        }
+
+        try {
+          if (dbAccount.accessToken && dbAccount.accessSecret) {
+            const client = createUserTwitterClient(dbAccount.accessToken, dbAccount.accessSecret)
+            const me = await client.currentUser()
+            profileData.username = me.screen_name || profileData.username
+            profileData.displayName = me.name || me.screen_name || profileData.displayName
+            // @ts-ignore - v1 typings
+            profileData.profileImage = me.profile_image_url_https || ''
+            // @ts-ignore - v1 typings
+            profileData.verified = me.verified || false
+          }
+        } catch {
+          // Use fallback data if API fails
+        }
+
+        const enrichedAccount = {
+          id: dbAccount.id,
+          accountId: dbAccount.accountId,
+          username: profileData.username,
+          displayName: profileData.displayName,
+          profileImage: profileData.profileImage,
+          verified: profileData.verified,
+          isActive: true,
+          createdAt: dbAccount.createdAt,
+          updatedAt: dbAccount.updatedAt,
+        }
+
+        await AccountCache.cacheAccount(ctx.user.id, enrichedAccount)
+        return enrichedAccount
+      }
+
+      return {
+        ...activeAccount,
+        isActive: true,
+      }
+    }),
+
   uploadMediaFromR2: protectedProcedure
     .input(z.object({ r2Key: z.string().min(1), mediaType: z.literal('image') }))
     .mutation(async ({ ctx, input }) => {
