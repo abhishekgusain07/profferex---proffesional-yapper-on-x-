@@ -1,0 +1,12 @@
+{
+  "reader-agent": {
+    "model": "claude-3-5-sonnet-20241022",
+    "description": "Agent specialized in reading, searching, and analyzing existing code and files",
+    "tools": ["Read", "Glob", "Grep", "LS", "Bash", "WebFetch", "WebSearch"]
+  },
+  "maker-agent": {
+    "model": "claude-3-5-sonnet-20241022", 
+    "description": "Agent specialized in creating, editing, and writing code and files",
+    "tools": ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "Read", "Glob", "Grep"]
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "d": {
+    "description": "Delegate mode - Use sub-agents for all tasks",
+    "prompt": "You must not do any tasks directly unless the user explicitly mentions you should. Delegate everything to a sub-agent. Use the reader-agent to find information in files, search code, analyze existing implementations, and gather context. Use the maker-agent to create new code, edit files, write implementations, and make changes. Always choose the appropriate agent based on whether the task involves reading/analyzing (reader-agent) or creating/modifying (maker-agent)."
+  }
+}

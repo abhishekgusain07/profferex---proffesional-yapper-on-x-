@@ -5,7 +5,7 @@ import { twitterOAuthClient, createUserTwitterClient } from '@/lib/twitter'
 import { getBaseUrl } from '@/constants/base-url'
 import { db } from '@/db'
 import { account, tweets } from '@/db/schema'
-import { and, eq, desc } from 'drizzle-orm'
+import { and, eq, desc, gte, lte, lt, ilike } from 'drizzle-orm'
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { qstash } from '@/lib/qstash'
@@ -527,6 +527,31 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Account is missing credentials')
       }
 
+      // First, store the tweet in database before posting to Twitter
+      const tweetId = crypto.randomUUID()
+      const [storedTweet] = await db
+        .insert(tweets)
+        .values({
+          id: tweetId,
+          userId: ctx.user.id,
+          accountId: target.id,
+          content: input.text,
+          mediaIds: input.mediaIds || [],
+          isScheduled: false,
+          isPublished: false, // Will be updated to true after successful post
+        })
+        .returning()
+
+      if (!storedTweet) {
+        throw new Error('Failed to store tweet in database')
+      }
+
+      console.log('💾 Tweet stored in database:', {
+        tweetId: storedTweet.id,
+        userId: ctx.user.id,
+        accountId: target.id,
+      })
+
       const client = createUserTwitterClient(target.accessToken, target.accessSecret)
 
       try {
@@ -534,11 +559,36 @@ export const twitterRouter = createTRPCRouter({
         if (input.mediaIds && input.mediaIds.length > 0) {
           params.media = { media_ids: input.mediaIds }
         }
+        
+        console.log('🚀 Posting to Twitter...', { tweetId: storedTweet.id })
         const result = await client.v2.tweet(params)
-        return { success: true, tweetId: result.data.id }
+        
+        // Update the stored tweet with Twitter ID and mark as published
+        await db
+          .update(tweets)
+          .set({
+            twitterId: result.data.id,
+            isPublished: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(tweets.id, storedTweet.id))
+
+        console.log('✅ Tweet posted and database updated:', {
+          tweetId: storedTweet.id,
+          twitterId: result.data.id,
+        })
+
+        return { success: true, tweetId: result.data.id, storedTweetId: storedTweet.id }
       } catch (e: any) {
         // eslint-disable-next-line no-console
         console.error('Tweet failed', e)
+        
+        // Keep the tweet in database for potential retry, but don't mark as published
+        console.log('❌ Tweet posting failed, keeping record in database for analysis:', {
+          tweetId: storedTweet.id,
+          error: e?.message,
+        })
+        
         const message = e?.data?.detail || e?.message || 'Failed to post tweet'
         throw new Error(message)
       }
@@ -897,5 +947,259 @@ export const twitterRouter = createTRPCRouter({
         console.error('Failed to delete account:', error)
         throw new Error('Failed to delete account. Please try again.')
       }
+    }),
+
+  getPosted: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(50).default(20),
+        cursor: z.string().optional(),
+        accountId: z.string().optional(),
+        search: z.string().optional(),
+        dateFrom: z.date().optional(),
+        dateTo: z.date().optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input = {} }) => {
+      const { limit = 20, cursor, accountId, search, dateFrom, dateTo } = input
+
+      console.log('📋 Fetching posted tweets:', {
+        userId: ctx.user.id,
+        limit,
+        cursor,
+        accountId,
+        search,
+        dateFrom,
+        dateTo,
+      })
+
+      // Get all user's Twitter accounts to filter by
+      const userAccounts = await db
+        .select({ id: account.id, accountId: account.accountId })
+        .from(account)
+        .where(and(eq(account.userId, ctx.user.id), eq(account.providerId, 'twitter')))
+
+      if (!userAccounts.length) {
+        return {
+          tweets: [],
+          nextCursor: null,
+          hasMore: false,
+        }
+      }
+
+      const accountIds = userAccounts.map(a => a.id)
+
+      // Build query conditions
+      const conditions = [
+        eq(tweets.userId, ctx.user.id),
+        eq(tweets.isPublished, true),
+        // Only include tweets from user's Twitter accounts
+        tweets.accountId.in(accountIds)
+      ]
+
+      // Add account filter if specified
+      if (accountId) {
+        conditions.push(eq(tweets.accountId, accountId))
+      }
+
+      // Add date filters if specified
+      if (dateFrom) {
+        conditions.push(gte(tweets.createdAt, dateFrom))
+      }
+      if (dateTo) {
+        conditions.push(lte(tweets.createdAt, dateTo))
+      }
+
+      // Add cursor-based pagination
+      if (cursor) {
+        conditions.push(lt(tweets.createdAt, new Date(cursor)))
+      }
+
+      let query = db
+        .select({
+          id: tweets.id,
+          content: tweets.content,
+          mediaIds: tweets.mediaIds,
+          twitterId: tweets.twitterId,
+          createdAt: tweets.createdAt,
+          updatedAt: tweets.updatedAt,
+          accountId: tweets.accountId,
+          // Join with account to get account details
+          account: {
+            id: account.id,
+            accountId: account.accountId,
+          }
+        })
+        .from(tweets)
+        .innerJoin(account, eq(tweets.accountId, account.id))
+        .where(and(...conditions))
+        .orderBy(desc(tweets.createdAt))
+        .limit(limit + 1) // Fetch one extra to determine if there are more
+
+      // Add search functionality using PostgreSQL's ILIKE for simple text search
+      if (search && search.trim()) {
+        const searchTerm = `%${search.trim()}%`
+        query = query.where(
+          and(
+            ...conditions,
+            ilike(tweets.content, searchTerm)
+          )
+        )
+      }
+
+      const results = await query
+
+      // Determine if there are more results
+      const hasMore = results.length > limit
+      const tweetsToReturn = hasMore ? results.slice(0, -1) : results
+
+      // Get cached account data for each tweet to include profile info
+      const enrichedTweets = await Promise.all(
+        tweetsToReturn.map(async (tweet) => {
+          try {
+            const cachedAccount = await AccountCache.getAccount(ctx.user.id, tweet.account.accountId)
+            
+            return {
+              ...tweet,
+              account: {
+                id: tweet.account.id,
+                accountId: tweet.account.accountId,
+                username: cachedAccount?.username || `user_${tweet.account.accountId}`,
+                displayName: cachedAccount?.displayName || cachedAccount?.username || `user_${tweet.account.accountId}`,
+                profileImage: cachedAccount?.profileImage || '',
+                verified: cachedAccount?.verified || false,
+              }
+            }
+          } catch (error) {
+            // Fallback if cache lookup fails
+            return {
+              ...tweet,
+              account: {
+                id: tweet.account.id,
+                accountId: tweet.account.accountId,
+                username: `user_${tweet.account.accountId}`,
+                displayName: `user_${tweet.account.accountId}`,
+                profileImage: '',
+                verified: false,
+              }
+            }
+          }
+        })
+      )
+
+      const nextCursor = hasMore ? tweetsToReturn[tweetsToReturn.length - 1]?.createdAt.toISOString() : null
+
+      console.log('✅ Posted tweets fetched:', {
+        count: enrichedTweets.length,
+        hasMore,
+        nextCursor,
+      })
+
+      return {
+        tweets: enrichedTweets,
+        nextCursor,
+        hasMore,
+      }
+    }),
+
+  searchTweets: protectedProcedure
+    .input(
+      z.object({
+        query: z.string().min(1, 'Search query is required'),
+        limit: z.number().min(1).max(50).default(20),
+        accountId: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      console.log('🔍 Searching tweets:', {
+        userId: ctx.user.id,
+        query: input.query,
+        limit: input.limit,
+        accountId: input.accountId,
+      })
+
+      // Get all user's Twitter accounts
+      const userAccounts = await db
+        .select({ id: account.id, accountId: account.accountId })
+        .from(account)
+        .where(and(eq(account.userId, ctx.user.id), eq(account.providerId, 'twitter')))
+
+      if (!userAccounts.length) {
+        return { tweets: [] }
+      }
+
+      const accountIds = userAccounts.map(a => a.id)
+
+      // Build search conditions
+      const conditions = [
+        eq(tweets.userId, ctx.user.id),
+        eq(tweets.isPublished, true),
+        tweets.accountId.in(accountIds),
+        ilike(tweets.content, `%${input.query.trim()}%`)
+      ]
+
+      // Add account filter if specified
+      if (input.accountId) {
+        conditions.push(eq(tweets.accountId, input.accountId))
+      }
+
+      const results = await db
+        .select({
+          id: tweets.id,
+          content: tweets.content,
+          mediaIds: tweets.mediaIds,
+          twitterId: tweets.twitterId,
+          createdAt: tweets.createdAt,
+          accountId: tweets.accountId,
+          account: {
+            id: account.id,
+            accountId: account.accountId,
+          }
+        })
+        .from(tweets)
+        .innerJoin(account, eq(tweets.accountId, account.id))
+        .where(and(...conditions))
+        .orderBy(desc(tweets.createdAt))
+        .limit(input.limit)
+
+      // Enrich with cached account data
+      const enrichedTweets = await Promise.all(
+        results.map(async (tweet) => {
+          try {
+            const cachedAccount = await AccountCache.getAccount(ctx.user.id, tweet.account.accountId)
+            
+            return {
+              ...tweet,
+              account: {
+                id: tweet.account.id,
+                accountId: tweet.account.accountId,
+                username: cachedAccount?.username || `user_${tweet.account.accountId}`,
+                displayName: cachedAccount?.displayName || cachedAccount?.username || `user_${tweet.account.accountId}`,
+                profileImage: cachedAccount?.profileImage || '',
+                verified: cachedAccount?.verified || false,
+              }
+            }
+          } catch (error) {
+            return {
+              ...tweet,
+              account: {
+                id: tweet.account.id,
+                accountId: tweet.account.accountId,
+                username: `user_${tweet.account.accountId}`,
+                displayName: `user_${tweet.account.accountId}`,
+                profileImage: '',
+                verified: false,
+              }
+            }
+          }
+        })
+      )
+
+      console.log('✅ Tweet search completed:', {
+        query: input.query,
+        resultsCount: enrichedTweets.length,
+      })
+
+      return { tweets: enrichedTweets }
     }),
 })
