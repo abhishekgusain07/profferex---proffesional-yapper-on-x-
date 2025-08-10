@@ -9,6 +9,7 @@ import { and, eq, desc } from 'drizzle-orm'
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { qstash } from '@/lib/qstash'
+import { AccountCache, CachedAccountData } from '@/lib/account-cache'
 
 export const twitterRouter = createTRPCRouter({
   createLink: protectedProcedure
@@ -40,17 +41,76 @@ export const twitterRouter = createTRPCRouter({
 
   getAccounts: protectedProcedure
     .query(async ({ ctx }) => {
+      // Try to get accounts from cache first
+      const cachedAccounts = await AccountCache.getUserAccounts(ctx.user.id)
+      const activeAccountId = await AccountCache.getActiveAccountId(ctx.user.id)
+
+      if (cachedAccounts.length > 0) {
+        // Return cached data with active account marked
+        return cachedAccounts.map(account => ({
+          ...account,
+          isActive: account.accountId === activeAccountId,
+        }))
+      }
+
+      // Fallback to database if cache is empty
       const results = await db
         .select()
         .from(account)
         .where(and(eq(account.userId, ctx.user.id), eq(account.providerId, 'twitter')))
 
-      return results.map((a) => ({
-        id: a.id,
-        accountId: a.accountId,
-        createdAt: a.createdAt,
-        updatedAt: a.updatedAt,
-      }))
+      if (results.length === 0) {
+        return []
+      }
+
+      // Try to fetch profile data from Twitter API for each account and cache it
+      const enrichedAccounts: CachedAccountData[] = []
+      
+      for (const dbAccount of results) {
+        let profileData = {
+          username: '',
+          displayName: '',
+          profileImage: '',
+          verified: false,
+        }
+
+        // Attempt to fetch current profile data from Twitter
+        try {
+          if (dbAccount.accessToken && dbAccount.accessSecret) {
+            const client = createUserTwitterClient(dbAccount.accessToken, dbAccount.accessSecret)
+            const me = await client.currentUser()
+            profileData.username = me.screen_name || ''
+            profileData.displayName = me.name || me.screen_name || ''
+            // @ts-ignore - v1 typings
+            profileData.profileImage = me.profile_image_url_https || ''
+            // @ts-ignore - v1 typings
+            profileData.verified = me.verified || false
+          }
+        } catch (error) {
+          // If Twitter API fails, use fallback data
+          profileData.username = `user_${dbAccount.accountId}`
+          profileData.displayName = profileData.username
+        }
+
+        const enrichedAccount: CachedAccountData = {
+          id: dbAccount.id,
+          accountId: dbAccount.accountId,
+          username: profileData.username,
+          displayName: profileData.displayName,
+          profileImage: profileData.profileImage,
+          verified: profileData.verified,
+          isActive: dbAccount.accountId === activeAccountId,
+          createdAt: dbAccount.createdAt,
+          updatedAt: dbAccount.updatedAt,
+        }
+
+        enrichedAccounts.push(enrichedAccount)
+
+        // Cache the enriched data for future requests
+        await AccountCache.cacheAccount(ctx.user.id, enrichedAccount)
+      }
+
+      return enrichedAccounts
     }),
 
   uploadMediaFromR2: protectedProcedure
@@ -552,6 +612,15 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Account not found or you do not have permission to delete it')
       }
 
+      // Get cached account data to retrieve username for cache cleanup
+      let username = ''
+      try {
+        const cachedAccount = await AccountCache.getAccount(ctx.user.id, accountToDelete.accountId)
+        username = cachedAccount?.username || `user_${accountToDelete.accountId}`
+      } catch {
+        username = `user_${accountToDelete.accountId}`
+      }
+
       try {
         // Delete all scheduled tweets for this account first
         await db
@@ -563,10 +632,13 @@ export const twitterRouter = createTRPCRouter({
             eq(tweets.isPublished, false)
           ))
 
-        // Delete the account
+        // Delete the account from database
         await db
           .delete(account)
           .where(eq(account.id, input.accountId))
+
+        // Remove account from cache
+        await AccountCache.removeAccount(ctx.user.id, accountToDelete.accountId, username)
 
         return {
           success: true,
