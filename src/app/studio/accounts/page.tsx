@@ -66,15 +66,80 @@ const AccountsPage = () => {
   const handleConfirmConnect = async () => {
     setConnectingTwitter(true)
     setConnectModalOpen(false)
+    
+    // Check session first
+    if (!session) {
+      setConnectionMessage({ 
+        type: 'error', 
+        message: 'Please log in first before connecting Twitter accounts.' 
+      })
+      setConnectingTwitter(false)
+      return
+    }
+    
+    console.log('Starting Twitter connection process...', {
+      sessionExists: !!session,
+      userId: session.user?.id,
+    })
+    
     try {
       const res = await createTwitterLink.refetch()
+      
+      // Check if there was an error in the response
+      if (res.error) {
+        console.error('tRPC Error Details:', {
+          message: res.error.message,
+          data: res.error.data,
+          shape: res.error.shape,
+        })
+        
+        const errorMessage = res.error.message || 'Failed to create Twitter authentication link'
+        setConnectionMessage({ 
+          type: 'error', 
+          message: errorMessage 
+        })
+        return
+      }
+      
       const url = res.data?.url
+      console.log('Twitter OAuth Response:', { 
+        hasUrl: !!url, 
+        url: url?.substring(0, 50) + '...' // Log first 50 chars for debugging
+      })
+      
       if (url) {
         window.location.href = url
+      } else {
+        console.error('No URL in successful response:', res.data)
+        setConnectionMessage({ 
+          type: 'error', 
+          message: 'No authentication URL received from Twitter. Please try again.' 
+        })
       }
-    } catch (e) {
-      console.error('Failed to connect Twitter:', e)
-      setConnectionMessage({ type: 'error', message: 'Failed to initiate Twitter connection. Please try again.' })
+    } catch (e: any) {
+      console.error('Failed to connect Twitter - Full error:', {
+        message: e?.message,
+        data: e?.data,
+        shape: e?.shape,
+        stack: e?.stack,
+        cause: e?.cause,
+      })
+      
+      let errorMessage = 'Failed to initiate Twitter connection. Please try again.'
+      
+      // Extract more specific error messages
+      if (e?.message) {
+        errorMessage = e.message
+      } else if (e?.data?.message) {
+        errorMessage = e.data.message
+      } else if (e?.shape?.message) {
+        errorMessage = e.shape.message
+      }
+      
+      setConnectionMessage({ 
+        type: 'error', 
+        message: errorMessage 
+      })
     } finally {
       setConnectingTwitter(false)
     }

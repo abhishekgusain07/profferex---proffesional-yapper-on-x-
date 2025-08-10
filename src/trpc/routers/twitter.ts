@@ -16,10 +16,20 @@ export const twitterRouter = createTRPCRouter({
     .input(z.object({ action: z.enum(['add-account']).default('add-account') }).optional())
     .query(async ({ ctx, input }) => {
       if (!process.env.TWITTER_CONSUMER_KEY || !process.env.TWITTER_CONSUMER_SECRET) {
-        throw new Error('Twitter app keys not configured')
+        console.error('Twitter credentials missing:', {
+          hasConsumerKey: !!process.env.TWITTER_CONSUMER_KEY,
+          hasConsumerSecret: !!process.env.TWITTER_CONSUMER_SECRET,
+        })
+        throw new Error('Twitter app credentials are not configured. Please check your environment variables.')
       }
 
       const callbackUrl = `${getBaseUrl()}/api/twitter/callback`
+      console.log('🔗 Creating Twitter OAuth link:', {
+        callbackUrl,
+        userId: ctx.user.id,
+        action: input?.action ?? 'add-account',
+      })
+
       try {
         const { url, oauth_token, oauth_token_secret } = await twitterOAuthClient.generateAuthLink(callbackUrl)
 
@@ -31,11 +41,33 @@ export const twitterRouter = createTRPCRouter({
           redis.set(`auth_action:${oauth_token}`, (input?.action ?? 'add-account') as string, { ex }),
         ])
 
+        console.log('✅ Twitter OAuth link created successfully:', {
+          hasUrl: !!url,
+          hasToken: !!oauth_token,
+        })
+
         return { url }
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to create Twitter link', err)
-        throw new Error('Failed to create Twitter link')
+      } catch (err: any) {
+        console.error('❌ Twitter OAuth error details:', {
+          error: err.message,
+          code: err.code,
+          data: err.data,
+          type: err.type,
+          headers: err.headers,
+          rateLimitReset: err.rateLimit?.reset,
+          callbackUrl,
+        })
+
+        // Provide more specific error messages based on the error
+        if (err.code === 403) {
+          throw new Error('Twitter app authentication failed. Please verify your Twitter app credentials and permissions are correctly configured.')
+        } else if (err.code === 401) {
+          throw new Error('Twitter app credentials are invalid. Please check your API key and secret.')
+        } else if (err.code === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.')
+        } else {
+          throw new Error(`Twitter API error (${err.code || 'unknown'}): ${err.message || 'Failed to create authentication link'}`)
+        }
       }
     }),
 
