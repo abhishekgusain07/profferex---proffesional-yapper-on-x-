@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Loader2, X, Upload, Calendar as CalendarIcon, Clock, Trash2, ChevronDown } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -58,6 +59,11 @@ const Studio = () => {
   )
 
   const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
+
+  const { data: activeAccount, isLoading: activeAccountLoading } = trpc.twitter.getActiveAccount.useQuery(
     undefined,
     { enabled: !!session }
   )
@@ -288,21 +294,61 @@ const Studio = () => {
       <div className="relative bg-white p-6 rounded-2xl w-full border border-stone-200 bg-clip-padding group isolate shadow-[0_1px_1px_rgba(0,0,0,0.05),0_4px_6px_rgba(34,42,53,0.04),0_24px_68px_rgba(47,48,55,0.05),0_2px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_2px_2px_rgba(0,0,0,0.06),0_6px_10px_rgba(34,42,53,0.05),0_28px_72px_rgba(47,48,55,0.06),0_3px_4px_rgba(0,0,0,0.05)]">
         <div className="flex gap-3 relative z-10">
           {/* Profile Avatar */}
-          <div className="w-12 h-12 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-indigo-50 shadow-sm">
-            <div className="w-6 h-6 text-indigo-600 font-semibold flex items-center justify-center">
-              {session?.user?.name?.charAt(0) || session?.user?.email?.charAt(0) || 'U'}
+          {activeAccount ? (
+            <Avatar className="w-12 h-12 flex-shrink-0 ring-2 ring-indigo-50 shadow-sm">
+              <AvatarImage src={activeAccount.profileImage} alt={`@${activeAccount.username}`} />
+              <AvatarFallback className="bg-gradient-to-br from-indigo-100 to-blue-100 text-indigo-600 font-semibold">
+                {activeAccount.displayName?.charAt(0) || activeAccount.username?.charAt(0) || 'T'}
+              </AvatarFallback>
+            </Avatar>
+          ) : (
+            <div className="w-12 h-12 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-indigo-50 shadow-sm">
+              {activeAccountLoading ? (
+                <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+              ) : (
+                <div className="w-6 h-6 text-indigo-600 font-semibold flex items-center justify-center">
+                  {session?.user?.name?.charAt(0) || session?.user?.email?.charAt(0) || 'U'}
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           <div className="flex-1">
             {/* Account Info */}
             <div className="flex items-center gap-1 mb-2">
-              <span className="font-medium text-stone-800">
-                {session?.user?.name || 'Your Name'}
-              </span>
-              <span className="text-stone-500">
-                @{session?.user?.email?.split('@')[0] || 'username'}
-              </span>
+              {activeAccount ? (
+                <>
+                  <span className="font-medium text-stone-800">
+                    {activeAccount.displayName || activeAccount.username}
+                  </span>
+                  <span className="text-stone-500">
+                    @{activeAccount.username}
+                  </span>
+                </>
+              ) : activeAccountLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-24 bg-stone-200 rounded animate-pulse"></div>
+                  <div className="h-4 w-16 bg-stone-200 rounded animate-pulse"></div>
+                </div>
+              ) : twitterAccounts && twitterAccounts.length > 0 ? (
+                <>
+                  <span className="font-medium text-stone-800 text-orange-600">
+                    No Active Account
+                  </span>
+                  <span className="text-stone-500 text-sm">
+                    Switch to an account to post
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-stone-800">
+                    {session?.user?.name || 'Your Name'}
+                  </span>
+                  <span className="text-stone-500">
+                    @{session?.user?.email?.split('@')[0] || 'username'}
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Tweet Textarea */}

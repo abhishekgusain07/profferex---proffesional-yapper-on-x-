@@ -176,7 +176,23 @@ const AccountsPage = () => {
   }
 
   const handleSwitchAccount = async (accountId: string) => {
-    console.log('🔄 Switching to account:', accountId)
+    console.log('🔄 Switching to account:', {
+      accountId,
+      accountIdType: typeof accountId,
+      accountIdLength: accountId?.length,
+      accountIdValue: accountId,
+    })
+
+    // Validate accountId before sending
+    if (!accountId || typeof accountId !== 'string' || accountId.trim() === '') {
+      console.error('❌ Invalid accountId:', accountId)
+      setConnectionMessage({ 
+        type: 'error', 
+        message: 'Invalid account ID. Please try refreshing the page.' 
+      })
+      return
+    }
+
     setSwitchingAccount(accountId)
     try {
       const result = await setActiveAccountMutation.mutateAsync({ accountId })
@@ -323,7 +339,25 @@ const AccountsPage = () => {
                 </div>
               ) : twitterAccounts && twitterAccounts.length > 0 ? (
                 <div className="space-y-4">
-                  {twitterAccounts.map((account) => (
+                  {twitterAccounts.filter((account) => {
+                    // Filter out accounts with invalid accountId
+                    const isValid = account.accountId && typeof account.accountId === 'string' && account.accountId.trim() !== ''
+                    if (!isValid) {
+                      console.warn('⚠️ Filtering out invalid account:', {
+                        id: account.id,
+                        accountId: account.accountId,
+                        username: account.username,
+                      })
+                    }
+                    return isValid
+                  }).map((account) => {
+                    console.log('📋 Rendering account:', {
+                      id: account.id,
+                      accountId: account.accountId,
+                      username: account.username,
+                      isActive: account.isActive,
+                    })
+                    return (
                     <div key={account.id} className="flex items-center gap-4 p-4 bg-slate-50/50 rounded-lg border border-slate-200">
                       <Avatar className="w-12 h-12 border border-slate-200">
                         <AvatarImage src={account.profileImage} alt={account.username} />
@@ -383,7 +417,8 @@ const AccountsPage = () => {
                         </Button>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12">

@@ -117,6 +117,16 @@ export const twitterRouter = createTRPCRouter({
       const enrichedAccounts: CachedAccountData[] = []
       
       for (const dbAccount of results) {
+        // Skip accounts without valid accountId
+        if (!dbAccount.accountId || typeof dbAccount.accountId !== 'string') {
+          console.warn('⚠️ Skipping account with invalid accountId:', {
+            accountId: dbAccount.accountId,
+            id: dbAccount.id,
+            type: typeof dbAccount.accountId,
+          })
+          continue
+        }
+
         const profileData = {
           username: '',
           displayName: '',
@@ -165,12 +175,15 @@ export const twitterRouter = createTRPCRouter({
 
   setActiveAccount: protectedProcedure
     .input(z.object({
-      accountId: z.string().min(1, 'Account ID is required'),
+      accountId: z.string().min(1, 'Account ID is required').regex(/^[0-9]+$/, 'Account ID must be a numeric string'),
     }))
     .mutation(async ({ ctx, input }) => {
       console.log('🔄 Setting active account:', {
         userId: ctx.user.id,
         requestedAccountId: input.accountId,
+        accountIdType: typeof input.accountId,
+        accountIdLength: input.accountId?.length,
+        accountIdValue: input.accountId,
       })
 
       // Verify the account exists and belongs to the current user
