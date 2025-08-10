@@ -528,4 +528,53 @@ export const twitterRouter = createTRPCRouter({
         tweetId: input.tweetId,
       }
     }),
+
+  deleteAccount: protectedProcedure
+    .input(
+      z.object({
+        accountId: z.string().min(1, 'Account ID is required'),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Verify the account exists and belongs to the current user
+      const accountToDelete = await db
+        .select()
+        .from(account)
+        .where(and(
+          eq(account.id, input.accountId),
+          eq(account.userId, ctx.user.id),
+          eq(account.providerId, 'twitter')
+        ))
+        .limit(1)
+        .then(rows => rows[0] || null)
+
+      if (!accountToDelete) {
+        throw new Error('Account not found or you do not have permission to delete it')
+      }
+
+      try {
+        // Delete all scheduled tweets for this account first
+        await db
+          .delete(tweets)
+          .where(and(
+            eq(tweets.accountId, input.accountId),
+            eq(tweets.userId, ctx.user.id),
+            eq(tweets.isScheduled, true),
+            eq(tweets.isPublished, false)
+          ))
+
+        // Delete the account
+        await db
+          .delete(account)
+          .where(eq(account.id, input.accountId))
+
+        return {
+          success: true,
+          accountId: input.accountId,
+        }
+      } catch (error: any) {
+        console.error('Failed to delete account:', error)
+        throw new Error('Failed to delete account. Please try again.')
+      }
+    }),
 })

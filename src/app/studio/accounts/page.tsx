@@ -6,12 +6,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Loader2, Plus, Users, Settings, ExternalLink, Trash2, CheckCircle } from 'lucide-react'
+import { Loader2, Plus, Users, Settings, ExternalLink, Trash2, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 const AccountsPage = () => {
   const { data: session, isPending: sessionLoading } = useSession()
   const [connectingTwitter, setConnectingTwitter] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [accountToDelete, setAccountToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
     undefined,
@@ -22,6 +26,21 @@ const AccountsPage = () => {
     { action: 'add-account' },
     { enabled: false }
   )
+
+  const deleteAccountMutation = trpc.twitter.deleteAccount.useMutation({
+    onSuccess: () => {
+      refetchAccounts()
+      setDeleteModalOpen(false)
+      setAccountToDelete(null)
+    },
+    onError: (error) => {
+      console.error('Failed to delete account:', error)
+      // Error will be shown in the UI via the mutation state
+    },
+    onSettled: () => {
+      setDeletingAccount(false)
+    },
+  })
 
   const handleConnectTwitter = async () => {
     setConnectingTwitter(true)
@@ -36,6 +55,31 @@ const AccountsPage = () => {
     } finally {
       setConnectingTwitter(false)
     }
+  }
+
+  const handleDeleteClick = (account: any) => {
+    setAccountToDelete({
+      id: account.id,
+      name: account.displayName || account.username || `Account ${account.accountId.slice(0, 8)}`,
+    })
+    setDeleteModalOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!accountToDelete) return
+    
+    setDeletingAccount(true)
+    try {
+      await deleteAccountMutation.mutateAsync({ accountId: accountToDelete.id })
+    } catch (error) {
+      // Error handling is done in the mutation callbacks
+      console.error('Delete failed:', error)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setDeleteModalOpen(false)
+    setAccountToDelete(null)
   }
 
   if (sessionLoading) {
@@ -151,7 +195,12 @@ const AccountsPage = () => {
                         <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-700">
                           <Settings className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteClick(account)}
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -243,6 +292,59 @@ const AccountsPage = () => {
           </Card>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <DialogTitle className="text-lg font-semibold text-slate-900">
+                Delete Account
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-slate-600">
+              Are you sure you want to delete{' '}
+              <span className="font-medium text-slate-900">{accountToDelete?.name}</span>?
+              <br /><br />
+              This action cannot be undone. All scheduled tweets for this account will also be deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={handleCancelDelete}
+              disabled={deletingAccount}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmDelete}
+              disabled={deletingAccount}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deletingAccount ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Account'
+              )}
+            </Button>
+          </DialogFooter>
+          {deleteAccountMutation.error && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">
+                {deleteAccountMutation.error.message}
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
