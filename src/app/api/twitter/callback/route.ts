@@ -3,8 +3,9 @@ import { TwitterApi } from 'twitter-api-v2'
 import { redis } from '@/lib/redis'
 import { db } from '@/db'
 import { account, user as userTable } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { getBaseUrl } from '@/constants/base-url'
+import { AccountCache } from '@/lib/account-cache'
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
@@ -66,28 +67,66 @@ export async function GET(req: NextRequest) {
     // Fetch basic profile for caching/display (best-effort)
     let profileName: string | null = null
     let profileImage: string | null = null
+    let verified = false
     try {
       const me = await loggedInClient.currentUser()
       profileName = me?.name ?? null
       // @ts-ignore - v1 typings
       profileImage = me?.profile_image_url_https ?? null
+      // @ts-ignore - v1 typings  
+      verified = me?.verified ?? false
     } catch {}
 
-    // Insert or ignore if exists (idempotent via providerId+accountId+userId combination in your logic)
+    // Check for account deduplication - prevent connecting the same Twitter account multiple times
+    const existingAccountId = await AccountCache.isUsernameConnected(userId, screenName)
+    if (existingAccountId) {
+      await cleanupTemp(oauth_token)
+      return redirectTo('/studio?error=account_already_connected')
+    }
+
+    // Also check database for existing account by accountId (Twitter user ID)
+    const [existingAccount] = await db
+      .select()
+      .from(account)
+      .where(and(
+        eq(account.accountId, twitterAccountId),
+        eq(account.providerId, 'twitter'),
+        eq(account.userId, userId)
+      ))
+      .limit(1)
+
+    if (existingAccount) {
+      await cleanupTemp(oauth_token)
+      return redirectTo('/studio?error=account_already_connected')
+    }
+
+    // Insert new account
     const dbAccountId = crypto.randomUUID()
-    await db
-      .insert(account)
-      .values({
-        id: dbAccountId,
-        accountId: twitterAccountId,
-        providerId: 'twitter',
-        userId,
-        accessToken,
-        accessSecret,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .onConflictDoNothing?.()
+    const now = new Date()
+    
+    await db.insert(account).values({
+      id: dbAccountId,
+      accountId: twitterAccountId,
+      providerId: 'twitter',
+      userId,
+      accessToken,
+      accessSecret,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    // Cache the account data for fast access
+    await AccountCache.cacheAccount(userId, {
+      id: dbAccountId,
+      accountId: twitterAccountId,
+      username: screenName,
+      displayName: profileName || screenName,
+      profileImage: profileImage || '',
+      verified,
+      isActive: false, // Will be set when user switches to this account
+      createdAt: now,
+      updatedAt: now,
+    })
 
     await cleanupTemp(oauth_token)
 
