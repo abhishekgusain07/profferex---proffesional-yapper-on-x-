@@ -5,7 +5,7 @@ import { twitterOAuthClient, createUserTwitterClient } from '@/lib/twitter'
 import { getBaseUrl } from '@/constants/base-url'
 import { db } from '@/db'
 import { account, tweets } from '@/db/schema'
-import { and, eq, desc, gte, lte, lt, ilike } from 'drizzle-orm'
+import { and, eq, desc, gte, lte, lt, ilike, inArray } from 'drizzle-orm'
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { qstash } from '@/lib/qstash'
@@ -994,7 +994,7 @@ export const twitterRouter = createTRPCRouter({
         eq(tweets.userId, ctx.user.id),
         eq(tweets.isPublished, true),
         // Only include tweets from user's Twitter accounts
-        tweets.accountId.in(accountIds)
+        inArray(tweets.accountId, accountIds)
       ]
 
       // Add account filter if specified
@@ -1039,12 +1039,7 @@ export const twitterRouter = createTRPCRouter({
       // Add search functionality using PostgreSQL's ILIKE for simple text search
       if (search && search.trim()) {
         const searchTerm = `%${search.trim()}%`
-        query = query.where(
-          and(
-            ...conditions,
-            ilike(tweets.content, searchTerm)
-          )
-        )
+        conditions.push(ilike(tweets.content, searchTerm))
       }
 
       const results = await query
@@ -1134,7 +1129,7 @@ export const twitterRouter = createTRPCRouter({
       const conditions = [
         eq(tweets.userId, ctx.user.id),
         eq(tweets.isPublished, true),
-        tweets.accountId.in(accountIds),
+        inArray(tweets.accountId, accountIds),
         ilike(tweets.content, `%${input.query.trim()}%`)
       ]
 
