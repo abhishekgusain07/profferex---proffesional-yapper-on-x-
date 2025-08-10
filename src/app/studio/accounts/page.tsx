@@ -18,6 +18,7 @@ const AccountsPage = () => {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [switchingAccount, setSwitchingAccount] = useState<string | null>(null)
   const [connectionMessage, setConnectionMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+  const [connectModalOpen, setConnectModalOpen] = useState(false)
 
   const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
     undefined,
@@ -58,8 +59,13 @@ const AccountsPage = () => {
     },
   })
 
-  const handleConnectTwitter = async () => {
+  const handleConnectTwitter = () => {
+    setConnectModalOpen(true)
+  }
+
+  const handleConfirmConnect = async () => {
     setConnectingTwitter(true)
+    setConnectModalOpen(false)
     try {
       const res = await createTwitterLink.refetch()
       const url = res.data?.url
@@ -68,9 +74,14 @@ const AccountsPage = () => {
       }
     } catch (e) {
       console.error('Failed to connect Twitter:', e)
+      setConnectionMessage({ type: 'error', message: 'Failed to initiate Twitter connection. Please try again.' })
     } finally {
       setConnectingTwitter(false)
     }
+  }
+
+  const handleCancelConnect = () => {
+    setConnectModalOpen(false)
   }
 
   const handleDeleteClick = (account: any) => {
@@ -450,6 +461,60 @@ const AccountsPage = () => {
               </p>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Connect Account Confirmation Dialog */}
+      <Dialog open={connectModalOpen} onOpenChange={setConnectModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <Plus className="w-5 h-5 text-blue-600" />
+              </div>
+              <DialogTitle className="text-lg font-semibold text-slate-900">
+                Connect Twitter Account
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-slate-600">
+              You're about to connect a new Twitter account to your profile.
+              <br /><br />
+              <strong>Before connecting:</strong>
+              <ul className="mt-2 text-sm list-disc list-inside space-y-1">
+                <li>Make sure you're logged into the correct Twitter account</li>
+                <li>This will allow you to post content to that Twitter account</li>
+                <li>You can connect multiple accounts and switch between them</li>
+                <li>Each account can have its own posting schedule and settings</li>
+              </ul>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={handleCancelConnect}
+              disabled={connectingTwitter}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmConnect}
+              disabled={connectingTwitter}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {connectingTwitter ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Continue to Twitter
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
