@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Loader2, Plus, Users, Settings, ExternalLink, Trash2, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Loader2, Plus, Users, ExternalLink, Trash2, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
@@ -84,7 +84,7 @@ const AccountsPage = () => {
     setConnectModalOpen(false)
   }
 
-  const handleDeleteClick = (account: any) => {
+  const handleDeleteClick = (account: { id: string; displayName?: string; username?: string; accountId: string }) => {
     setAccountToDelete({
       id: account.id,
       name: account.displayName || account.username || `Account ${account.accountId.slice(0, 8)}`,
@@ -139,14 +139,6 @@ const AccountsPage = () => {
       }
       setConnectionMessage({ type: 'error', message })
       window.history.replaceState({}, document.title, window.location.pathname)
-    }
-
-    // Auto-hide messages after 5 seconds
-    if (connectionMessage) {
-      const timer = setTimeout(() => {
-        setConnectionMessage(null)
-      }, 5000)
-      return () => clearTimeout(timer)
     }
   }, [])
 
@@ -263,7 +255,7 @@ const AccountsPage = () => {
                 </div>
               ) : twitterAccounts && twitterAccounts.length > 0 ? (
                 <div className="space-y-4">
-                  {twitterAccounts.map((account: any) => (
+                  {twitterAccounts.map((account) => (
                     <div key={account.id} className="flex items-center gap-4 p-4 bg-slate-50/50 rounded-lg border border-slate-200">
                       <Avatar className="w-12 h-12 border border-slate-200">
                         <AvatarImage src={account.profileImage} alt={account.username} />
@@ -477,11 +469,11 @@ const AccountsPage = () => {
               </DialogTitle>
             </div>
             <DialogDescription className="text-slate-600">
-              You're about to connect a new Twitter account to your profile.
+              You&apos;re about to connect a new Twitter account to your profile.
               <br /><br />
               <strong>Before connecting:</strong>
               <ul className="mt-2 text-sm list-disc list-inside space-y-1">
-                <li>Make sure you're logged into the correct Twitter account</li>
+                <li>Make sure you&apos;re logged into the correct Twitter account</li>
                 <li>This will allow you to post content to that Twitter account</li>
                 <li>You can connect multiple accounts and switch between them</li>
                 <li>Each account can have its own posting schedule and settings</li>

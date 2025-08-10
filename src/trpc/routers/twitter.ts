@@ -67,7 +67,7 @@ export const twitterRouter = createTRPCRouter({
       const enrichedAccounts: CachedAccountData[] = []
       
       for (const dbAccount of results) {
-        let profileData = {
+        const profileData = {
           username: '',
           displayName: '',
           profileImage: '',
@@ -81,12 +81,12 @@ export const twitterRouter = createTRPCRouter({
             const me = await client.currentUser()
             profileData.username = me.screen_name || ''
             profileData.displayName = me.name || me.screen_name || ''
-            // @ts-ignore - v1 typings
+            // @ts-expect-error - v1 typings
             profileData.profileImage = me.profile_image_url_https || ''
-            // @ts-ignore - v1 typings
+            // @ts-expect-error - v1 typings
             profileData.verified = me.verified || false
           }
-        } catch (error) {
+        } catch {
           // If Twitter API fails, use fallback data
           profileData.username = `user_${dbAccount.accountId}`
           profileData.displayName = profileData.username
@@ -174,7 +174,7 @@ export const twitterRouter = createTRPCRouter({
         }
 
         // Try to fetch fresh profile data and cache it
-        let profileData = {
+        const profileData = {
           username: `user_${dbAccount.accountId}`,
           displayName: `user_${dbAccount.accountId}`,
           profileImage: '',
@@ -187,9 +187,9 @@ export const twitterRouter = createTRPCRouter({
             const me = await client.currentUser()
             profileData.username = me.screen_name || profileData.username
             profileData.displayName = me.name || me.screen_name || profileData.displayName
-            // @ts-ignore - v1 typings
+            // @ts-expect-error - v1 typings
             profileData.profileImage = me.profile_image_url_https || ''
-            // @ts-ignore - v1 typings
+            // @ts-expect-error - v1 typings
             profileData.verified = me.verified || false
           }
         } catch {

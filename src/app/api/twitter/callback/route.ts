@@ -71,9 +71,9 @@ export async function GET(req: NextRequest) {
     try {
       const me = await loggedInClient.currentUser()
       profileName = me?.name ?? null
-      // @ts-ignore - v1 typings
+      // @ts-expect-error - v1 typings
       profileImage = me?.profile_image_url_https ?? null
-      // @ts-ignore - v1 typings  
+      // @ts-expect-error - v1 typings  
       verified = me?.verified ?? false
     } catch {}
 
@@ -138,7 +138,6 @@ export async function GET(req: NextRequest) {
 
     return redirectTo('/studio?account_connected=true')
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Twitter OAuth callback error', err)
     return redirectTo('/studio?error=callback_failed')
   }
