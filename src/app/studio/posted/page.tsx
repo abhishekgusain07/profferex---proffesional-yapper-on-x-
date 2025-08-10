@@ -5,25 +5,102 @@ import { useSession } from '@/lib/auth-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ExternalLink, Calendar, Heart, MessageCircle, Repeat2 } from 'lucide-react'
-import { format } from 'date-fns'
+import { Loader2, ExternalLink, Plus, BarChart3, Search } from 'lucide-react'
+import { useState, useCallback, useMemo } from 'react'
+import TweetCard from '@/components/tweet-card'
+import SearchBar from '@/components/search-bar'
+import TweetAnalytics from '@/components/tweet-analytics'
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from '@/components/ui/dialog'
+
+interface SearchFilters {
+  accountId?: string
+  dateFrom?: Date
+  dateTo?: Date
+  sortBy?: 'newest' | 'oldest' | 'most_engaged'
+}
 
 const PostedPage = () => {
   const { data: session, isPending: sessionLoading } = useSession()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({})
+  const [selectedTweetForAnalytics, setSelectedTweetForAnalytics] = useState<any>(null)
 
-  // This would be a new tRPC endpoint to get posted tweets
-  // For now, I'll create a placeholder structure
-  const { data: postedTweets, isLoading: postsLoading } = trpc.twitter.getPosted?.useQuery(
+  // Get user's Twitter accounts for filter dropdown
+  const { data: twitterAccounts } = trpc.twitter.getAccounts.useQuery(
     undefined,
+    { enabled: !!session }
+  )
+
+  // Get posted tweets with filters
+  const queryInput = useMemo(() => ({
+    limit: 20,
+    search: searchQuery || undefined,
+    ...searchFilters
+  }), [searchQuery, searchFilters])
+
+  const { 
+    data: postedData, 
+    isLoading: postsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = trpc.twitter.getPosted.useInfiniteQuery(
+    queryInput,
     { 
       enabled: !!session,
-      // This endpoint doesn't exist yet, so it will show loading state
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
     }
-  ) ?? { data: undefined, isLoading: true }
+  )
+
+  // Flatten tweets from all pages
+  const allTweets = postedData?.pages.flatMap(page => page.tweets) || []
+  const totalCount = allTweets.length
+
+  // Handle search
+  const handleSearch = useCallback((query: string, filters?: SearchFilters) => {
+    setSearchQuery(query)
+    if (filters) {
+      setSearchFilters(filters)
+    }
+  }, [])
+
+  // Handle analytics view
+  const handleViewAnalytics = useCallback((tweet: any) => {
+    setSelectedTweetForAnalytics(tweet)
+  }, [])
+
+  // Loading skeleton component
+  const TweetCardSkeleton = () => (
+    <Card className="animate-pulse">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-12 h-12 bg-gray-200 rounded-full" />
+          <div className="flex-1 space-y-3">
+            <div className="space-y-2">
+              <div className="h-4 bg-gray-200 rounded w-3/4" />
+              <div className="h-4 bg-gray-200 rounded w-1/2" />
+            </div>
+            <div className="h-16 bg-gray-200 rounded" />
+            <div className="flex gap-4">
+              <div className="h-3 bg-gray-200 rounded w-16" />
+              <div className="h-3 bg-gray-200 rounded w-16" />
+              <div className="h-3 bg-gray-200 rounded w-16" />
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 
   if (sessionLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100/80 flex items-center justify-center">
         <div className="flex items-center gap-2">
           <Loader2 className="size-4 animate-spin" />
           <span>Loading...</span>
@@ -34,7 +111,7 @@ const PostedPage = () => {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100/80 flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Authentication Required</CardTitle>
@@ -46,119 +123,184 @@ const PostedPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100/80">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
+        {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full flex items-center justify-center">
-              <ExternalLink className="w-5 h-5 text-emerald-600" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full flex items-center justify-center shadow-sm">
+                <BarChart3 className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Posted Tweets</h1>
+                <p className="text-gray-600">View your published posts and their performance</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900">Posted Tweets</h1>
-              <p className="text-slate-600">View your published posts and their performance</p>
+            
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="bg-green-100 text-green-700 px-3 py-1">
+                {postsLoading ? '...' : `${totalCount} posts`}
+              </Badge>
+              <Button asChild size="sm" className="gap-2">
+                <a href="/studio">
+                  <Plus className="w-4 h-4" />
+                  New Tweet
+                </a>
+              </Button>
             </div>
           </div>
+
+          {/* Search Bar */}
+          <SearchBar
+            onSearch={handleSearch}
+            accounts={twitterAccounts?.map(account => ({
+              id: account.id,
+              username: account.username,
+              displayName: account.displayName
+            })) || []}
+            className="mb-6"
+          />
         </div>
 
-        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">Recent Posts</CardTitle>
-                <CardDescription>Your recently published tweets</CardDescription>
-              </div>
-              <Badge variant="secondary" className="bg-green-100 text-green-700">
-                {postsLoading ? '...' : (postedTweets?.length || 0)} posts
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {postsLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="flex items-start gap-4 p-4 bg-slate-100 rounded-lg">
-                      <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
-                      <div className="flex-1 space-y-3">
-                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                        <div className="h-4 bg-slate-200 rounded w-1/2"></div>
-                        <div className="flex gap-4">
-                          <div className="h-3 bg-slate-200 rounded w-16"></div>
-                          <div className="h-3 bg-slate-200 rounded w-16"></div>
-                          <div className="h-3 bg-slate-200 rounded w-16"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : postedTweets && postedTweets.length > 0 ? (
-              <div className="space-y-4">
-                {postedTweets.map((tweet: any) => (
-                  <div key={tweet.id} className="p-4 bg-slate-50/50 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center">
-                        <ExternalLink className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div className="flex-1 space-y-3">
-                        <p className="text-slate-900 leading-relaxed">{tweet.content}</p>
-                        <div className="flex items-center gap-4 text-sm text-slate-500">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            <span>{tweet.postedAt ? format(new Date(tweet.postedAt), 'MMM d, yyyy') : 'Unknown'}</span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1">
-                              <Heart className="w-3 h-3" />
-                              <span>{tweet.likes || 0}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <MessageCircle className="w-3 h-3" />
-                              <span>{tweet.replies || 0}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Repeat2 className="w-3 h-3" />
-                              <span>{tweet.retweets || 0}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            Published
-                          </Badge>
-                          {tweet.tweetId && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              asChild
-                            >
-                              <a href={`https://x.com/i/web/status/${tweet.tweetId}`} target="_blank" rel="noreferrer">
-                                <ExternalLink className="w-3 h-3 mr-1" />
-                                View on X
-                              </a>
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-16">
-                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <ExternalLink className="w-8 h-8 text-slate-400" />
+        {/* Content */}
+        {postsLoading ? (
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <TweetCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : allTweets.length > 0 ? (
+          <>
+            {/* Results Info */}
+            {(searchQuery || Object.keys(searchFilters).length > 0) && (
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 text-blue-800">
+                  <Search className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    Found {totalCount} tweet{totalCount !== 1 ? 's' : ''}
+                    {searchQuery && ` containing "${searchQuery}"`}
+                  </span>
                 </div>
-                <h3 className="text-lg font-medium text-slate-900 mb-2">No posts yet</h3>
-                <p className="text-slate-600 mb-6">Your published tweets will appear here after posting</p>
-                <Button asChild>
-                  <a href="/studio">Create your first post</a>
+              </div>
+            )}
+
+            {/* Tweets Grid */}
+            <div className="space-y-4">
+              {allTweets.map((tweet) => (
+                <TweetCard
+                  key={tweet.id}
+                  tweet={{
+                    id: tweet.id,
+                    content: tweet.content,
+                    mediaIds: tweet.mediaIds || [],
+                    twitterId: tweet.twitterId,
+                    createdAt: new Date(tweet.createdAt),
+                    account: {
+                      id: tweet.account.id,
+                      accountId: tweet.account.accountId,
+                      username: tweet.account.username,
+                      displayName: tweet.account.displayName,
+                      profileImage: tweet.account.profileImage,
+                      verified: tweet.account.verified
+                    },
+                    // Mock analytics for now - in real app would come from Twitter API
+                    analytics: {
+                      likes: Math.floor(Math.random() * 500) + 10,
+                      retweets: Math.floor(Math.random() * 100) + 5,
+                      replies: Math.floor(Math.random() * 50) + 2,
+                      views: Math.floor(Math.random() * 10000) + 100,
+                      impressions: Math.floor(Math.random() * 15000) + 500,
+                      engagementRate: parseFloat((Math.random() * 8 + 1).toFixed(1))
+                    }
+                  }}
+                  onViewAnalytics={handleViewAnalytics}
+                />
+              ))}
+            </div>
+
+            {/* Load More Button */}
+            {hasNextPage && (
+              <div className="flex justify-center mt-8">
+                <Button
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  {isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load More Tweets'
+                  )}
                 </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </>
+        ) : (
+          /* Empty State */
+          <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
+            <CardContent className="text-center py-16">
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <ExternalLink className="w-10 h-10 text-gray-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                {searchQuery || Object.keys(searchFilters).length > 0 
+                  ? 'No tweets found' 
+                  : 'No posts yet'
+                }
+              </h3>
+              <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                {searchQuery || Object.keys(searchFilters).length > 0
+                  ? 'Try adjusting your search or filters to find what you\'re looking for.'
+                  : 'Your published tweets will appear here after posting. Start creating amazing content!'
+                }
+              </p>
+              <Button asChild className="gap-2">
+                <a href="/studio">
+                  <Plus className="w-4 h-4" />
+                  {searchQuery || Object.keys(searchFilters).length > 0 
+                    ? 'Create New Tweet' 
+                    : 'Create your first post'
+                  }
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Analytics Dialog */}
+        <Dialog 
+          open={!!selectedTweetForAnalytics} 
+          onOpenChange={(open) => !open && setSelectedTweetForAnalytics(null)}
+        >
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Tweet Analytics</DialogTitle>
+            </DialogHeader>
+            {selectedTweetForAnalytics && (
+              <div className="space-y-6">
+                {/* Tweet Preview */}
+                <TweetCard
+                  tweet={selectedTweetForAnalytics}
+                  variant="compact"
+                  showActions={false}
+                />
+                
+                {/* Detailed Analytics */}
+                <TweetAnalytics
+                  tweetId={selectedTweetForAnalytics.id}
+                  analytics={selectedTweetForAnalytics.analytics}
+                  variant="detailed"
+                  showComparison={true}
+                />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
