@@ -10,6 +10,10 @@ import { useState, useCallback, useMemo } from 'react'
 import TweetCard from '@/components/tweet-card'
 import SearchBar from '@/components/search-bar'
 import TweetAnalytics from '@/components/tweet-analytics'
+import OptimizedTweetList from '@/components/optimized-tweet-list'
+import AnalyticsDashboard from '@/components/analytics-dashboard'
+import TweetCardSkeleton from '@/components/tweet-card-skeleton'
+import { usePerformanceMonitor } from '@/hooks/use-performance'
 import { 
   Dialog, 
   DialogContent, 
@@ -30,6 +34,10 @@ const PostedPage = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({})
   const [selectedTweetForAnalytics, setSelectedTweetForAnalytics] = useState<any>(null)
+  const [viewMode, setViewMode] = useState<'tweets' | 'analytics'>('tweets')
+
+  // Performance monitoring
+  const performance = usePerformanceMonitor('PostedPage', [searchQuery, searchFilters])
 
   // Get user's Twitter accounts for filter dropdown
   const { data: twitterAccounts } = trpc.twitter.getAccounts.useQuery(
@@ -139,6 +147,30 @@ const PostedPage = () => {
             </div>
             
             <div className="flex items-center gap-3">
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => setViewMode('tweets')}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    viewMode === 'tweets'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Tweets
+                </button>
+                <button
+                  onClick={() => setViewMode('analytics')}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    viewMode === 'analytics'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Analytics
+                </button>
+              </div>
+
               <Badge variant="secondary" className="bg-green-100 text-green-700 px-3 py-1">
                 {postsLoading ? '...' : `${totalCount} posts`}
               </Badge>
@@ -151,20 +183,38 @@ const PostedPage = () => {
             </div>
           </div>
 
-          {/* Search Bar */}
-          <SearchBar
-            onSearch={handleSearch}
-            accounts={twitterAccounts?.map(account => ({
-              id: account.id,
-              username: account.username,
-              displayName: account.displayName
-            })) || []}
-            className="mb-6"
-          />
+          {/* Search Bar - Only show for tweets view */}
+          {viewMode === 'tweets' && (
+            <SearchBar
+              onSearch={handleSearch}
+              accounts={twitterAccounts?.map(account => ({
+                id: account.id,
+                username: account.username,
+                displayName: account.displayName
+              })) || []}
+              className="mb-6"
+            />
+          )}
         </div>
 
         {/* Content */}
-        {postsLoading ? (
+        {viewMode === 'analytics' ? (
+          /* Analytics View */
+          <AnalyticsDashboard
+            tweets={allTweets.map(tweet => ({
+              ...tweet,
+              createdAt: new Date(tweet.createdAt),
+              analytics: {
+                likes: Math.floor(Math.random() * 500) + 10,
+                retweets: Math.floor(Math.random() * 100) + 5,
+                replies: Math.floor(Math.random() * 50) + 2,
+                views: Math.floor(Math.random() * 10000) + 100,
+                impressions: Math.floor(Math.random() * 15000) + 500,
+                engagementRate: parseFloat((Math.random() * 8 + 1).toFixed(1))
+              }
+            }))}
+          />
+        ) : postsLoading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
               <TweetCardSkeleton key={i} />
@@ -185,60 +235,38 @@ const PostedPage = () => {
               </div>
             )}
 
-            {/* Tweets Grid */}
-            <div className="space-y-4">
-              {allTweets.map((tweet) => (
-                <TweetCard
-                  key={tweet.id}
-                  tweet={{
-                    id: tweet.id,
-                    content: tweet.content,
-                    mediaIds: tweet.mediaIds || [],
-                    twitterId: tweet.twitterId,
-                    createdAt: new Date(tweet.createdAt),
-                    account: {
-                      id: tweet.account.id,
-                      accountId: tweet.account.accountId,
-                      username: tweet.account.username,
-                      displayName: tweet.account.displayName,
-                      profileImage: tweet.account.profileImage,
-                      verified: tweet.account.verified
-                    },
-                    // Mock analytics for now - in real app would come from Twitter API
-                    analytics: {
-                      likes: Math.floor(Math.random() * 500) + 10,
-                      retweets: Math.floor(Math.random() * 100) + 5,
-                      replies: Math.floor(Math.random() * 50) + 2,
-                      views: Math.floor(Math.random() * 10000) + 100,
-                      impressions: Math.floor(Math.random() * 15000) + 500,
-                      engagementRate: parseFloat((Math.random() * 8 + 1).toFixed(1))
-                    }
-                  }}
-                  onViewAnalytics={handleViewAnalytics}
-                />
-              ))}
-            </div>
-
-            {/* Load More Button */}
-            {hasNextPage && (
-              <div className="flex justify-center mt-8">
-                <Button
-                  onClick={() => fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  variant="outline"
-                  className="gap-2"
-                >
-                  {isFetchingNextPage ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Load More Tweets'
-                  )}
-                </Button>
-              </div>
-            )}
+            {/* Optimized Tweet List */}
+            <OptimizedTweetList
+              tweets={allTweets.map((tweet) => ({
+                id: tweet.id,
+                content: tweet.content,
+                mediaIds: tweet.mediaIds || [],
+                twitterId: tweet.twitterId,
+                createdAt: new Date(tweet.createdAt),
+                account: {
+                  id: tweet.account.id,
+                  accountId: tweet.account.accountId,
+                  username: tweet.account.username,
+                  displayName: tweet.account.displayName,
+                  profileImage: tweet.account.profileImage,
+                  verified: tweet.account.verified
+                },
+                // Mock analytics for now - in real app would come from Twitter API
+                analytics: {
+                  likes: Math.floor(Math.random() * 500) + 10,
+                  retweets: Math.floor(Math.random() * 100) + 5,
+                  replies: Math.floor(Math.random() * 50) + 2,
+                  views: Math.floor(Math.random() * 10000) + 100,
+                  impressions: Math.floor(Math.random() * 15000) + 500,
+                  engagementRate: parseFloat((Math.random() * 8 + 1).toFixed(1))
+                }
+              }))}
+              isLoading={postsLoading}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              onLoadMore={fetchNextPage}
+              onViewAnalytics={handleViewAnalytics}
+            />
           </>
         ) : (
           /* Empty State */
