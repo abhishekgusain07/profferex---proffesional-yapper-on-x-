@@ -85,7 +85,7 @@ async function checkRateLimit(userId: string, isPro: boolean = false): Promise<R
   }
 }
 
-async function saveMessage(message: Omit<ChatMessage, 'createdAt'> & { createdAt?: Date }): Promise<ChatMessage> {
+async function saveMessage(message: Omit<ChatMessage, 'createdAt'> & { createdAt?: Date }, userId: string): Promise<ChatMessage> {
   const fullMessage: ChatMessage = {
     ...message,
     createdAt: message.createdAt || new Date(),
@@ -98,7 +98,7 @@ async function saveMessage(message: Omit<ChatMessage, 'createdAt'> & { createdAt
   await redis.lpush(`chat:conversation:${message.chatId}:messages`, message.id)
   
   // Update conversation metadata
-  await updateConversationMetadata(message.chatId, message.content, message.role === 'user')
+  await updateConversationMetadata(message.chatId, message.content, message.role === 'user', userId)
   
   return fullMessage
 }
@@ -123,10 +123,12 @@ async function getMessages(conversationId: string, limit: number = 50, offset: n
 async function updateConversationMetadata(
   conversationId: string, 
   lastMessageContent: string, 
-  isUserMessage: boolean
+  isUserMessage: boolean,
+  userId: string
 ): Promise<void> {
   const now = new Date().toISOString()
-  const conversation = await redis.get(`chat:conversation:${conversationId}`) as ChatConversation | null
+  const conversationData = await redis.get(`chat:conversation:${conversationId}`)
+  const conversation = conversationData ? JSON.parse(conversationData as string) : null
   
   let title = conversation?.title || 'New Conversation'
   
@@ -135,13 +137,13 @@ async function updateConversationMetadata(
     title = lastMessageContent.slice(0, 50) + (lastMessageContent.length > 50 ? '...' : '')
   }
   
-  const updatedConversation: ChatConversation = {
+  const updatedConversation = {
     id: conversationId,
     title,
-    userId: conversation?.userId || '',
-    createdAt: conversation?.createdAt || new Date(now),
-    updatedAt: new Date(now),
-    lastMessageAt: new Date(now),
+    userId: conversation?.userId || userId,
+    createdAt: conversation?.createdAt || now,
+    updatedAt: now,
+    lastMessageAt: now,
     messageCount: (conversation?.messageCount || 0) + 1,
   }
   
@@ -165,10 +167,10 @@ async function getUserConversations(userId: string, limit: number, offset: numbe
   
   return conversations
     .filter(Boolean)
-    .map((conv: ChatConversation) => ({
+    .map((conv) => ({
       id: conv.id,
       title: conv.title,
-      lastUpdated: conv.lastMessageAt.toString(),
+      lastUpdated: conv.lastMessageAt,
       messageCount: conv.messageCount,
     }))
 }
@@ -177,13 +179,13 @@ async function createConversation(userId: string): Promise<string> {
   const conversationId = nanoid()
   const now = new Date().toISOString()
   
-  const conversation: ChatConversation = {
+  const conversation = {
     id: conversationId,
     title: 'New Conversation',
     userId,
-    createdAt: new Date(now),
-    updatedAt: new Date(now),
-    lastMessageAt: new Date(now),
+    createdAt: now,
+    updatedAt: now,
+    lastMessageAt: now,
     messageCount: 0,
   }
   
@@ -250,7 +252,7 @@ export const chatRouter = createTRPCRouter({
       }
       
       // Save user message
-      await saveMessage(userMessage)
+      await saveMessage(userMessage, user.id)
       
       // Get conversation history for context
       const previousMessages = await getMessages(activeConversationId, 10)
@@ -297,7 +299,7 @@ export const chatRouter = createTRPCRouter({
         }
         
         // Save assistant message
-        await saveMessage(assistantMessage)
+        await saveMessage(assistantMessage, user.id)
         
         return {
           conversationId: activeConversationId,
@@ -322,8 +324,15 @@ export const chatRouter = createTRPCRouter({
       const { conversationId, limit, offset } = input
       
       // Check if user owns this conversation
-      const conversation = await redis.get(`chat:conversation:${conversationId}`) as ChatConversation | null
-      if (!conversation || conversation.userId !== user.id) {
+      const conversationData = await redis.get(`chat:conversation:${conversationId}`)
+      if (!conversationData) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Conversation not found',
+        })
+      }
+      const conversation = JSON.parse(conversationData as string)
+      if (conversation.userId !== user.id) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Conversation not found',
@@ -365,8 +374,15 @@ export const chatRouter = createTRPCRouter({
       const { conversationId } = input
       
       // Check if user owns this conversation
-      const conversation = await redis.get(`chat:conversation:${conversationId}`) as ChatConversation | null
-      if (!conversation || conversation.userId !== user.id) {
+      const conversationData = await redis.get(`chat:conversation:${conversationId}`)
+      if (!conversationData) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Conversation not found',
+        })
+      }
+      const conversation = JSON.parse(conversationData as string)
+      if (conversation.userId !== user.id) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Conversation not found',

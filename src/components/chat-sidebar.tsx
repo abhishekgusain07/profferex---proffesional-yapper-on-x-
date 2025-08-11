@@ -166,53 +166,57 @@ export function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {messages.length === 0 ? (
                 // Welcome screen with suggestions
-                <div className="flex-1 p-6 flex flex-col justify-center">
-                  <div className="text-center mb-6">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <MessageSquare className="w-8 h-8 text-blue-600" />
+                <div className="flex-1 overflow-y-auto p-6">
+                  <div className="flex flex-col justify-center min-h-full">
+                    <div className="text-center mb-6">
+                      <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <MessageSquare className="w-8 h-8 text-blue-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        Welcome to AI Chat
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-6">
+                        I'm here to help you create engaging tweets, brainstorm content ideas, and improve your social media presence.
+                      </p>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      Welcome to AI Chat
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                      I'm here to help you create engaging tweets, brainstorm content ideas, and improve your social media presence.
-                    </p>
-                  </div>
 
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">
-                      Try asking me about:
-                    </h4>
-                    {promptSuggestions.map((suggestion, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleSuggestionClick(suggestion.prompt)}
-                        className={cn(
-                          'w-full text-left p-3 rounded-lg border border-gray-200',
-                          'hover:border-blue-300 hover:bg-blue-50 transition-all duration-200',
-                          'group cursor-pointer'
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h5 className="font-medium text-gray-900 text-sm mb-1">
-                              {suggestion.title}
-                            </h5>
-                            <p className="text-xs text-gray-600 leading-relaxed">
-                              {suggestion.prompt}
-                            </p>
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">
+                        Try asking me about:
+                      </h4>
+                      {promptSuggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleSuggestionClick(suggestion.prompt)}
+                          className={cn(
+                            'w-full text-left p-3 rounded-lg border border-gray-200',
+                            'hover:border-blue-300 hover:bg-blue-50 transition-all duration-200',
+                            'group cursor-pointer'
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h5 className="font-medium text-gray-900 text-sm mb-1">
+                                {suggestion.title}
+                              </h5>
+                              <p className="text-xs text-gray-600 leading-relaxed">
+                                {suggestion.prompt}
+                              </p>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
                           </div>
-                          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ) : (
-                <Messages className="flex-1" />
+                <div className="flex-1 overflow-hidden">
+                  <Messages className="h-full" />
+                </div>
               )}
             </div>
 

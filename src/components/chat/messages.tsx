@@ -60,7 +60,8 @@ export const Messages = memo(({ className }: MessagesProps) => {
   return (
     <div 
       ref={containerRef}
-      className={`flex-1 overflow-y-auto p-4 space-y-6 ${className || ''}`}
+      className={`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 ${className || ''}`}
+      style={{ height: '100%', maxHeight: '100%' }}
     >
       <AnimatePresence mode="popLayout">
         {messages.map((message, index) => (
