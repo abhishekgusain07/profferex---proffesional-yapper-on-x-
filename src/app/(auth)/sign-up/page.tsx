@@ -90,7 +90,7 @@ export default function SignUp() {
                   <span className="text-white font-bold text-sm">🐦</span>
                 </div>
                 <span className="ml-3 text-xl font-semibold text-gray-900">
-                  Contentport
+                  The Twitter Tool
                 </span>
               </div>
 

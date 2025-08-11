@@ -48,10 +48,14 @@ export const LeftSidebar = () => {
               isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100',
             )}
           >
+            <Link href="/">
+            <div className='flex items-center justify-center gap-0.5'>
             <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-md flex items-center justify-center text-white text-sm font-bold">
               T
             </div>
             <p className={cn('text-sm/6 text-slate-800 font-semibold')}>Twitter Studio</p>
+            </div>
+            </Link>
           </div>
         </div>
       </SidebarHeader>

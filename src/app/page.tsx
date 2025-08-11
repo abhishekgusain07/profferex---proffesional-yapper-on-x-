@@ -1,7 +1,6 @@
 import Navbar from '@/components/navbar'
 import DuolingoButton from '@/components/ui/duolingo-button'
 import { auth } from '@/lib/auth'
-import MuxPlayer from '@mux/mux-player-react'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import Script from 'next/script'
@@ -40,7 +39,7 @@ const Page = async () => {
                     growing on Twitter
                   </h1>
                   <p className="mt-8 text-gray-500 text-base text-pretty sm:text-xl/8 max-w-2xl">
-                    <span className="">Contentport helps you </span>
+                    <span className="">The Twitter Tool helps you </span>
                     <span className="text-black">
                       create, schedule & manage twitter content
                     </span>{' '}
@@ -115,7 +114,8 @@ const Page = async () => {
                   </div>
                 </div>
               </div>
-              <div className="relative flex items-center h-fit -m-2 rounded-xl bg-gray-900/5 p-2 ring-1 ring-gray-900/10 ring-inset lg:-m-4 lg:rounded-2xl lg:p-4 shadow-2xl">
+              {/* Removed video section */}
+              {/* <div className="relative flex items-center h-fit -m-2 rounded-xl bg-gray-900/5 p-2 ring-1 ring-gray-900/10 ring-inset lg:-m-4 lg:rounded-2xl lg:p-4 shadow-2xl">
                 <MuxPlayer
                   accentColor="#4f46e5"
                   style={{ aspectRatio: 16 / 9 }}
@@ -124,7 +124,7 @@ const Page = async () => {
                   playbackId="01ddBxgG7W53ZCMZ02LLP692sLD4w009XzUtoCd00NcSBO8"
                   playsInline
                 />
-              </div>
+              </div> */}
 
               <>
                 <Script
