@@ -45,14 +45,55 @@ const AccountsPage = () => {
     },
   })
 
+  const utils = trpc.useUtils()
+
   const setActiveAccountMutation = trpc.twitter.setActiveAccount.useMutation({
+    onMutate: async (variables) => {
+      // Cancel any outgoing refetches to avoid overwriting our optimistic update
+      await utils.twitter.getAccounts.cancel()
+      await utils.twitter.getActiveAccount.cancel()
+
+      // Snapshot the previous values
+      const previousAccounts = utils.twitter.getAccounts.getData()
+      const previousActiveAccount = utils.twitter.getActiveAccount.getData()
+
+      // Optimistically update the accounts list
+      if (previousAccounts) {
+        const optimisticAccounts = previousAccounts.map(account => ({
+          ...account,
+          isActive: account.accountId === variables.accountId
+        }))
+        utils.twitter.getAccounts.setData(undefined, optimisticAccounts)
+      }
+
+      // Optimistically update the active account
+      const newActiveAccount = previousAccounts?.find(acc => acc.accountId === variables.accountId)
+      if (newActiveAccount) {
+        utils.twitter.getActiveAccount.setData(undefined, { ...newActiveAccount, isActive: true })
+      }
+
+      return { previousAccounts, previousActiveAccount }
+    },
     onSuccess: (data) => {
       console.log('✅ Account switch successful:', data)
-      refetchAccounts()
+      
+      // Invalidate queries to get fresh data from server
+      utils.twitter.getActiveAccount.invalidate()
+      utils.twitter.getAccounts.invalidate()
+      
       setConnectionMessage({ type: 'success', message: 'Account switched successfully!' })
     },
-    onError: (error) => {
+    onError: (error, variables, context) => {
       console.error('❌ Failed to switch account:', error)
+      
+      // Rollback optimistic updates on error
+      if (context?.previousAccounts) {
+        utils.twitter.getAccounts.setData(undefined, context.previousAccounts)
+      }
+      if (context?.previousActiveAccount) {
+        utils.twitter.getActiveAccount.setData(undefined, context.previousActiveAccount)
+      }
+      
       setConnectionMessage({ type: 'error', message: 'Failed to switch account. Please try again.' })
     },
     onSettled: () => {

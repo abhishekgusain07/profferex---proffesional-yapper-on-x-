@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { trpc } from '@/trpc/client'
 import { useSession, signOut } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
@@ -63,9 +63,14 @@ const Studio = () => {
     { enabled: !!session }
   )
 
-  const { data: activeAccount, isLoading: activeAccountLoading } = trpc.twitter.getActiveAccount.useQuery(
+  const { data: activeAccount, isLoading: activeAccountLoading, refetch: refetchActiveAccount } = trpc.twitter.getActiveAccount.useQuery(
     undefined,
-    { enabled: !!session }
+    { 
+      enabled: !!session,
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      staleTime: 0, // Always refetch to ensure latest active account
+    }
   )
 
   // tRPC mutations
@@ -262,6 +267,37 @@ const Studio = () => {
 
   const hasUploading = media.some((m) => m.uploading)
   const mediaIds = media.filter((m) => m.media_id).map((m) => m.media_id!)
+
+  // Refresh active account when component mounts or becomes visible
+  useEffect(() => {
+    // Refetch active account when the component mounts
+    if (session) {
+      refetchActiveAccount()
+    }
+  }, [session, refetchActiveAccount])
+
+  // Listen for visibility changes and focus events to refetch when user returns to the tab/window
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && session) {
+        refetchActiveAccount()
+      }
+    }
+
+    const handleWindowFocus = () => {
+      if (session) {
+        refetchActiveAccount()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleWindowFocus)
+    }
+  }, [session, refetchActiveAccount])
 
   if (sessionLoading) {
     return (
