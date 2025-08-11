@@ -204,13 +204,21 @@ const PostedPage = () => {
             tweets={allTweets.map(tweet => ({
               ...tweet,
               createdAt: new Date(tweet.createdAt),
-              analytics: tweet.analytics || {
+              analytics: tweet.analytics ? {
+                ...tweet.analytics,
+                views: tweet.analytics.views ?? 0,
+                impressions: tweet.analytics.impressions ?? 0,
+                profileClicks: tweet.analytics.profileClicks ?? 0,
+                urlClicks: tweet.analytics.urlClicks ?? 0
+              } : {
                 likes: 0,
                 retweets: 0,
                 replies: 0,
                 quotes: 0,
                 views: 0,
                 impressions: 0,
+                profileClicks: 0,
+                urlClicks: 0,
                 engagementRate: 0
               }
             }))}
@@ -252,13 +260,21 @@ const PostedPage = () => {
                   profileImage: tweet.account.profileImage,
                   verified: tweet.account.verified
                 },
-                analytics: tweet.analytics || {
+                analytics: tweet.analytics ? {
+                  ...tweet.analytics,
+                  views: tweet.analytics.views ?? 0,
+                  impressions: tweet.analytics.impressions ?? 0,
+                  profileClicks: tweet.analytics.profileClicks ?? 0,
+                  urlClicks: tweet.analytics.urlClicks ?? 0
+                } : {
                   likes: 0,
                   retweets: 0,
                   replies: 0,
                   quotes: 0,
                   views: 0,
                   impressions: 0,
+                  profileClicks: 0,
+                  urlClicks: 0,
                   engagementRate: 0
                 }
               }))}
