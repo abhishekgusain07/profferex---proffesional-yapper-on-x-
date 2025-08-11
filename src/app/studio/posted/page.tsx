@@ -204,13 +204,14 @@ const PostedPage = () => {
             tweets={allTweets.map(tweet => ({
               ...tweet,
               createdAt: new Date(tweet.createdAt),
-              analytics: {
-                likes: Math.floor(Math.random() * 500) + 10,
-                retweets: Math.floor(Math.random() * 100) + 5,
-                replies: Math.floor(Math.random() * 50) + 2,
-                views: Math.floor(Math.random() * 10000) + 100,
-                impressions: Math.floor(Math.random() * 15000) + 500,
-                engagementRate: parseFloat((Math.random() * 8 + 1).toFixed(1))
+              analytics: tweet.analytics || {
+                likes: 0,
+                retweets: 0,
+                replies: 0,
+                quotes: 0,
+                views: 0,
+                impressions: 0,
+                engagementRate: 0
               }
             }))}
           />
@@ -251,14 +252,14 @@ const PostedPage = () => {
                   profileImage: tweet.account.profileImage,
                   verified: tweet.account.verified
                 },
-                // Mock analytics for now - in real app would come from Twitter API
-                analytics: {
-                  likes: Math.floor(Math.random() * 500) + 10,
-                  retweets: Math.floor(Math.random() * 100) + 5,
-                  replies: Math.floor(Math.random() * 50) + 2,
-                  views: Math.floor(Math.random() * 10000) + 100,
-                  impressions: Math.floor(Math.random() * 15000) + 500,
-                  engagementRate: parseFloat((Math.random() * 8 + 1).toFixed(1))
+                analytics: tweet.analytics || {
+                  likes: 0,
+                  retweets: 0,
+                  replies: 0,
+                  quotes: 0,
+                  views: 0,
+                  impressions: 0,
+                  engagementRate: 0
                 }
               }))}
               isLoading={postsLoading}
