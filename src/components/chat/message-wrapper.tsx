@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Copy, RotateCcw, Trash2, FileText, User, Bot } from 'lucide-react'
 import type { ChatMessage } from '@/types/chat'
 import { useChatContext } from '@/hooks/use-chat'
