@@ -10,6 +10,7 @@ import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { qstash } from '@/lib/qstash'
 import { AccountCache, CachedAccountData } from '@/lib/account-cache'
+import { fetchTweetAnalytics } from '@/lib/twitter-analytics'
 
 export const twitterRouter = createTRPCRouter({
   createLink: protectedProcedure
@@ -1048,14 +1049,38 @@ export const twitterRouter = createTRPCRouter({
       const hasMore = results.length > limit
       const tweetsToReturn = hasMore ? results.slice(0, -1) : results
 
-      // Get cached account data for each tweet to include profile info
+      // Get cached account data and real analytics for each tweet
       const enrichedTweets = await Promise.all(
         tweetsToReturn.map(async (tweet) => {
           try {
             const cachedAccount = await AccountCache.getAccount(ctx.user.id, tweet.account.accountId)
             
+            // Fetch real analytics if twitterId exists and account has valid credentials
+            let analytics = null
+            if (tweet.twitterId) {
+              try {
+                // Get account credentials from database for analytics API call
+                const dbAccount = await db
+                  .select({ accessToken: account.accessToken, accessSecret: account.accessSecret })
+                  .from(account)
+                  .where(eq(account.id, tweet.accountId))
+                  .limit(1)
+                  .then(rows => rows[0] || null)
+
+                if (dbAccount?.accessToken && dbAccount?.accessSecret) {
+                  const client = createUserTwitterClient(dbAccount.accessToken, dbAccount.accessSecret)
+                  const analyticsResult = await fetchTweetAnalytics(client, [tweet.twitterId])
+                  analytics = analyticsResult[0]?.analytics || null
+                }
+              } catch (analyticsError) {
+                console.warn('Failed to fetch analytics for tweet:', tweet.twitterId, analyticsError)
+                // Continue without analytics rather than failing the whole request
+              }
+            }
+            
             return {
               ...tweet,
+              analytics,
               account: {
                 id: tweet.account.id,
                 accountId: tweet.account.accountId,
@@ -1069,6 +1094,7 @@ export const twitterRouter = createTRPCRouter({
             // Fallback if cache lookup fails
             return {
               ...tweet,
+              analytics: null,
               account: {
                 id: tweet.account.id,
                 accountId: tweet.account.accountId,
