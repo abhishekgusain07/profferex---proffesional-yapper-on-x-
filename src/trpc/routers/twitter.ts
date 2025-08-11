@@ -1070,7 +1070,13 @@ export const twitterRouter = createTRPCRouter({
                 if (dbAccount?.accessToken && dbAccount?.accessSecret) {
                   const client = createUserTwitterClient(dbAccount.accessToken, dbAccount.accessSecret)
                   const analyticsResult = await fetchTweetAnalytics(client, [tweet.twitterId])
-                  analytics = analyticsResult[0]?.analytics || null
+                  const result = analyticsResult[0]
+                  
+                  if (result?.analytics) {
+                    analytics = result.analytics
+                  } else if (result?.error) {
+                    console.warn(`Analytics unavailable for tweet ${tweet.twitterId}: ${result.error}`)
+                  }
                 }
               } catch (analyticsError) {
                 console.warn('Failed to fetch analytics for tweet:', tweet.twitterId, analyticsError)
