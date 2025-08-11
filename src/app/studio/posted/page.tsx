@@ -70,6 +70,15 @@ const PostedPage = () => {
   const allTweets = postedData?.pages.flatMap(page => page.tweets) || []
   const totalCount = allTweets.length
 
+  // Map of accountId -> account info from twitterAccounts to ensure accurate display data
+  const accountsByAccountId = useMemo(() => {
+    const map = new Map<string, any>()
+    ;(twitterAccounts || []).forEach(acc => {
+      if (acc?.accountId) map.set(acc.accountId, acc)
+    })
+    return map
+  }, [twitterAccounts])
+
   // Handle search
   const handleSearch = useCallback((query: string, filters?: SearchFilters) => {
     setSearchQuery(query)
@@ -252,14 +261,17 @@ const PostedPage = () => {
                 mediaIds: tweet.mediaIds || [],
                 twitterId: tweet.twitterId,
                 createdAt: new Date(tweet.createdAt),
-                account: {
-                  id: tweet.account.id,
-                  accountId: tweet.account.accountId,
-                  username: tweet.account.username,
-                  displayName: tweet.account.displayName,
-                  profileImage: tweet.account.profileImage,
-                  verified: tweet.account.verified
-                },
+                account: (() => {
+                  const acc = accountsByAccountId.get(tweet.account.accountId)
+                  return {
+                    id: tweet.account.id,
+                    accountId: tweet.account.accountId,
+                    username: acc?.username ?? tweet.account.username,
+                    displayName: acc?.displayName ?? tweet.account.displayName,
+                    profileImage: acc?.profileImage ?? tweet.account.profileImage,
+                    verified: acc?.verified ?? tweet.account.verified,
+                  }
+                })(),
                 analytics: tweet.analytics ? {
                   ...tweet.analytics,
                   views: tweet.analytics.views ?? 0,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, memo, useCallback } from 'react'
+import { useState, useMemo, memo, useCallback, useEffect } from 'react'
 import TweetCard from './tweet-card'
 import TweetCardSkeleton from './tweet-card-skeleton'
 import { Button } from '@/components/ui/button'
@@ -116,7 +116,7 @@ export function OptimizedTweetList({
   })
 
   // Auto-load more when intersection observer triggers
-  useState(() => {
+  useEffect(() => {
     if (isIntersecting && hasNextPage && onLoadMore && !isFetchingNextPage) {
       onLoadMore()
     }
