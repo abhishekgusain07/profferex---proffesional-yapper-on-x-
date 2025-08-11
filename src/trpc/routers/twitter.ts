@@ -1015,6 +1015,12 @@ export const twitterRouter = createTRPCRouter({
         conditions.push(lt(tweets.createdAt, new Date(cursor)))
       }
 
+      // Add search functionality using PostgreSQL's ILIKE for simple text search
+      if (search && search.trim()) {
+        const searchTerm = `%${search.trim()}%`
+        conditions.push(ilike(tweets.content, searchTerm))
+      }
+
       let query = db
         .select({
           id: tweets.id,
@@ -1035,12 +1041,6 @@ export const twitterRouter = createTRPCRouter({
         .where(and(...conditions))
         .orderBy(desc(tweets.createdAt))
         .limit(limit + 1) // Fetch one extra to determine if there are more
-
-      // Add search functionality using PostgreSQL's ILIKE for simple text search
-      if (search && search.trim()) {
-        const searchTerm = `%${search.trim()}%`
-        conditions.push(ilike(tweets.content, searchTerm))
-      }
 
       const results = await query
 
