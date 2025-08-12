@@ -1,245 +1,141 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useEffect, PropsWithChildren } from 'react'
-import { trpc } from '@/trpc/client'
+import { createContext, useContext, PropsWithChildren, useMemo, useEffect, useCallback, useRef } from 'react'
+import { DefaultChatTransport } from 'ai'
+import { useChat } from '@ai-sdk/react'
 import { nanoid } from 'nanoid'
-import type { 
-  ChatMessage, 
-  MessageMetadata, 
-  ChatContextType,
-  ChatHistoryItem 
-} from '@/types/chat'
+import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
+import type { ChatMessage, ChatContextType, MessageMetadata } from '@/types/chat'
+
 const ChatContext = createContext<ChatContextType | null>(null)
+
+// Stable reference for empty messages array
+const EMPTY_MESSAGES = { messages: [] }
+
+// Message comparison function to prevent unnecessary updates
+function areMessagesEqual(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((msg, index) => {
+    const otherMsg = b[index]
+    const msgTyped = msg as { id: string; content: string; role: string }
+    const otherMsgTyped = otherMsg as { id: string; content: string; role: string }
+    return msgTyped.id === otherMsgTyped.id && 
+           msgTyped.content === otherMsgTyped.content && 
+           msgTyped.role === otherMsgTyped.role
+  })
+}
 
 interface ChatProviderProps extends PropsWithChildren {
   initialConversationId?: string
 }
 
 export function ChatProvider({ children, initialConversationId }: ChatProviderProps) {
-  // State
-  const [conversationId, setConversationId] = useState<string | null>(initialConversationId || null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const chatId = initialConversationId ?? nanoid()
 
-  // tRPC hooks
-  const sendMessageMutation = trpc.chat.sendMessage.useMutation()
-  const createConversationMutation = trpc.chat.createConversation.useMutation()
-  const deleteConversationMutation = trpc.chat.deleteConversation.useMutation()
-  
-  const { data: conversationHistory } = trpc.chat.getHistory.useQuery(
-    { conversationId: conversationId! },
-    { enabled: !!conversationId }
-  )
+  const chat = useChat<any>({
+    id: chatId,
+    transport: new DefaultChatTransport({
+      api: '/api/chat/chat',
+      prepareSendMessagesRequest({ messages, id }) {
+        return { body: { message: messages[messages.length - 1], id } }
+      },
+    }),
+    messages: [],
+    onError: ({ message }) => {
+      toast.error(message)
+    },
+  })
 
-  // Load conversation history when conversation changes
+  const { data } = useQuery({
+    queryKey: ['initial-messages', chatId],
+    queryFn: async () => {
+      const res = await fetch(`/api/chat/get_message_history?chatId=${chatId}`)
+      return (await res.json()) as { messages: unknown[] }
+    },
+    initialData: EMPTY_MESSAGES,
+  })
+
+  // Track previous messages to prevent unnecessary updates
+  const prevMessagesRef = useRef<unknown[]>([])
+
   useEffect(() => {
-    if (conversationHistory?.messages) {
-      setMessages(conversationHistory.messages)
+    if (data?.messages && !areMessagesEqual(prevMessagesRef.current, data.messages)) {
+      prevMessagesRef.current = data.messages
+      chat.setMessages(data.messages as never[])
     }
-  }, [conversationHistory])
+  }, [data?.messages, chat])
 
-  // Send message function
+  // Memoize message transformation to prevent unnecessary recalculations
+  const transformedMessages = useMemo(() => {
+    return (chat.messages as { id: string; role: string; content?: string; parts?: { type: string; text: string }[]; metadata?: MessageMetadata }[]).map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.parts?.map((p) => (p.type === 'text' ? p.text : '')).join('') ?? m.content ?? '',
+      metadata: m.metadata as MessageMetadata | undefined,
+      chatId: chatId,
+      createdAt: new Date(),
+    })) as ChatMessage[]
+  }, [chat.messages, chatId])
+
+  // Memoize callback functions to prevent unnecessary re-renders
   const sendMessage = useCallback(async (content: string, metadata?: MessageMetadata) => {
-    if (!content.trim()) return
+    await chat.sendMessage({
+      role: 'user',
+      parts: [{ type: 'text', text: content }],
+      metadata,
+    } as never)
+  }, [chat])
 
-    setIsLoading(true)
-    setIsStreaming(true)
-    setError(null)
-
-    try {
-      const result = await sendMessageMutation.mutateAsync({
-        content: content.trim(),
-        conversationId: conversationId || undefined,
-        metadata,
-      })
-
-      // Update conversation ID if it was created
-      if (!conversationId) {
-        setConversationId(result.conversationId)
-      }
-
-      // Add both messages to state optimistically
-      setMessages(prev => [
-        ...prev,
-        result.userMessage,
-        result.assistantMessage,
-      ])
-
-    } catch (err: any) {
-      console.error('Failed to send message:', err)
-      const errorMessage = err.message || 'Failed to send message. Please try again.'
-      setError(errorMessage)
-      toast.error(errorMessage)
-    } finally {
-      setIsLoading(false)
-      setIsStreaming(false)
-    }
-  }, [conversationId, sendMessageMutation])
-
-  // Regenerate response function
-  const regenerateResponse = useCallback(async (messageId: string) => {
-    const messageIndex = messages.findIndex(msg => msg.id === messageId)
-    if (messageIndex === -1) return
-
-    const message = messages[messageIndex]
-    if (message.role !== 'assistant') return
-
-    // Find the previous user message
-    let userMessage: ChatMessage | null = null
-    for (let i = messageIndex - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        userMessage = messages[i]
-        break
-      }
-    }
-
-    if (!userMessage) return
-
-    // Remove the assistant message we're regenerating
-    setMessages(prev => prev.filter(msg => msg.id !== messageId))
-
-    // Resend the user message
-    await sendMessage(userMessage.content, userMessage.metadata)
-  }, [messages, sendMessage])
-
-  // Clear chat function
   const clearChat = useCallback(() => {
-    setMessages([])
-    setConversationId(null)
-    setError(null)
-  }, [])
+    chat.setMessages([] as never[])
+    prevMessagesRef.current = []
+  }, [chat])
 
-  // Start new conversation
-  const startNewConversation = useCallback(async () => {
-    try {
-      const result = await createConversationMutation.mutateAsync()
-      setConversationId(result.conversationId)
-      setMessages([])
-      setError(null)
-    } catch (err: any) {
-      console.error('Failed to create conversation:', err)
-      toast.error('Failed to create new conversation')
-    }
-  }, [createConversationMutation])
-
-  // Load conversation
-  const loadConversation = useCallback(async (id: string) => {
-    setConversationId(id)
-    setMessages([])
-    setError(null)
-    // Messages will be loaded via the useQuery hook
-  }, [])
-
-  // Delete message function
-  const deleteMessage = useCallback(async (messageId: string) => {
-    setMessages(prev => prev.filter(msg => msg.id !== messageId))
-    // TODO: Implement server-side message deletion if needed
-  }, [])
-
-  // Edit message function
-  const editMessage = useCallback(async (messageId: string, content: string) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId ? { ...msg, content } : msg
-    ))
-    // TODO: Implement server-side message editing if needed
-  }, [])
-
-  // Stop streaming (not implemented yet, but placeholder)
   const stop = useCallback(() => {
-    setIsStreaming(false)
-    setIsLoading(false)
-  }, [])
+    chat.stop()
+  }, [chat])
 
-  const contextValue: ChatContextType = {
-    conversationId,
-    messages,
-    isLoading,
-    isStreaming,
-    error,
+  const contextValue: ChatContextType = useMemo(() => ({
+    conversationId: chatId,
+    messages: transformedMessages,
+    isLoading: chat.status === 'submitted' || chat.status === 'streaming',
+    isStreaming: chat.status === 'streaming',
+    error: null,
     sendMessage,
-    regenerateResponse,
+    regenerateResponse: async () => {},
     clearChat,
-    startNewConversation,
-    loadConversation,
-    deleteMessage,
-    editMessage,
+    startNewConversation: () => {},
+    loadConversation: async () => {},
+    deleteMessage: async () => {},
+    editMessage: async () => {},
     stop,
-  }
+  }), [chatId, transformedMessages, chat.status, sendMessage, clearChat, stop])
 
   return (
-    <ChatContext.Provider value={contextValue}>
-      {children}
-    </ChatContext.Provider>
+    <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
   )
 }
 
 export function useChatContext(): ChatContextType {
   const context = useContext(ChatContext)
-  
-  if (!context) {
-    throw new Error('useChatContext must be used within a ChatProvider')
-  }
-  
+  if (!context) throw new Error('useChatContext must be used within a ChatProvider')
   return context
 }
 
-// Additional hook for managing chat conversations list
 export function useChatConversations() {
-  const [page, setPage] = useState(0)
-  const limit = 20
-
-  const { 
-    data: conversationsData, 
-    isLoading, 
-    refetch 
-  } = trpc.chat.getConversations.useQuery({
-    limit,
-    offset: page * limit,
-  })
-
-  const deleteConversationMutation = trpc.chat.deleteConversation.useMutation({
-    onSuccess: () => {
-      refetch()
-      toast.success('Conversation deleted')
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Failed to delete conversation')
-    }
-  })
-
-  const deleteConversation = useCallback(async (conversationId: string) => {
-    if (window.confirm('Are you sure you want to delete this conversation?')) {
-      await deleteConversationMutation.mutateAsync({ conversationId })
-    }
-  }, [deleteConversationMutation])
-
-  const loadMore = useCallback(() => {
-    if (conversationsData?.hasMore) {
-      setPage(prev => prev + 1)
-    }
-  }, [conversationsData?.hasMore])
-
   return {
-    conversations: conversationsData?.conversations || [],
-    isLoading,
-    hasMore: conversationsData?.hasMore || false,
-    total: conversationsData?.total || 0,
-    deleteConversation,
-    loadMore,
-    refetch,
+    conversations: [],
+    isLoading: false,
+    hasMore: false,
+    total: 0,
+    deleteConversation: async () => {},
+    loadMore: () => {},
+    refetch: async () => {},
   }
 }
 
-// Hook for getting rate limit information
 export function useChatRateLimit() {
-  const { data: rateLimit, refetch } = trpc.chat.getRateLimit.useQuery()
-
-  return {
-    rateLimit,
-    refetch,
-  }
+  return { rateLimit: null, refetch: async () => {} }
 }
