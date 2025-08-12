@@ -161,6 +161,43 @@ export const LeftSidebar = () => {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* Knowledge Group */}
+        <SidebarGroup>
+          <SidebarGroupLabel
+            className={cn(
+              'transition-all duration-200 ease-out px-3',
+              isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100',
+            )}
+          >
+            Knowledge
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <Link
+              href="/studio/knowledge"
+              className={cn(
+                buttonVariants({
+                  variant: 'ghost',
+                  className: 'w-full justify-start gap-2 px-3 py-2',
+                }),
+                pathname.includes('/studio/knowledge') &&
+                  'bg-blue-100 hover:bg-blue-100 text-blue-900 border border-blue-200',
+              )}
+            >
+              <div className="size-6 flex items-center justify-center flex-shrink-0">
+                🧠
+              </div>
+              <span
+                className={cn(
+                  'transition-all duration-200 ease-out',
+                  isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100',
+                )}
+              >
+                Knowledge
+              </span>
+            </Link>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {/* Account Group */}
         <SidebarGroup>
           <SidebarGroupLabel
