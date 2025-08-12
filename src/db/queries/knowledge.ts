@@ -1,130 +1,136 @@
-// import { db } from '../index'
-// import { eq, desc, and, or, like, inArray, sql } from 'drizzle-orm'
-// import { SerializedEditorState, SerializedLexicalNode } from 'lexical'
-// import { KnowledgeDocument, knowledgeDocument, knowledgeTags } from '../schema'
+import { db } from '../index'
+import { eq, desc, and, or, like, inArray, sql } from 'drizzle-orm'
+import { KnowledgeDocument, knowledgeDocument, knowledgeTags } from '../schema'
 
-// export interface CreateDocumentInput {
-//   title: string
-//   content: string
-//   editorState?: SerializedEditorState<SerializedLexicalNode>
-//   category?: 'url' | 'file' | 'manual'
-//   sourceUrl?: string
-//   sourceType?: string
-//   metadata?: Record<string, any>
-//   userId: string
-// }
+export interface CreateDocumentInput {
+  title: string
+  fileName: string
+  type: 'url' | 'txt' | 'docx' | 'pdf' | 'image' | 'manual'
+  s3Key: string
+  description?: string
+  sourceUrl?: string
+  metadata?: Record<string, any>
+  userId: string
+  sizeBytes?: number
+}
 
-// export interface UpdateDocumentInput {
-//   title?: string
-//   content?: string
-//   editorState?: SerializedEditorState<SerializedLexicalNode>
-//   category?: 'url' | 'file' | 'manual'
-//   wordCount?: number
-//   isStarred?: boolean
-// }
+export interface UpdateDocumentInput {
+  title?: string
+  description?: string
+  isStarred?: boolean
+  metadata?: Record<string, any>
+}
 
-// export const updateDocument = async (
-//   documentId: string,
-//   userId: string,
-//   input: UpdateDocumentInput,
-// ) => {
-//   const updateData = { ...input, updatedAt: new Date() }
+export const createDocument = async (input: CreateDocumentInput) => {
+  const [created] = await db
+    .insert(knowledgeDocument)
+    .values(input)
+    .returning()
 
-//   if (input.content) {
-//     updateData.wordCount = input.content
-//       .split(/\s+/)
-//       .filter((word) => word.length > 0).length
-//   }
+  return created
+}
 
-//   const [updated] = await db
-//     .update(knowledgeDocument)
-//     .set(updateData)
-//     .where(
-//       and(eq(knowledgeDocument.id, documentId), eq(knowledgeDocument.userId, userId)),
-//     )
-//     .returning()
+export const updateDocument = async (
+  documentId: string,
+  userId: string,
+  input: UpdateDocumentInput,
+) => {
+  const updateData = { ...input, updatedAt: new Date() }
 
-//   return updated || null
-// }
+  const [updated] = await db
+    .update(knowledgeDocument)
+    .set(updateData)
+    .where(
+      and(eq(knowledgeDocument.id, documentId), eq(knowledgeDocument.userId, userId)),
+    )
+    .returning()
 
-// export const getDocument = async (documentId: string, userId: string) => {
-//   const [document] = await db
-//     .select()
-//     .from(knowledgeDocument)
-//     .where(
-//       and(eq(knowledgeDocument.id, documentId), eq(knowledgeDocument.userId, userId)),
-//     )
-//     .limit(1)
+  return updated || null
+}
 
-//   // @ts-ignore
-//   return document || null
-// }
+export const getDocument = async (documentId: string, userId: string) => {
+  const [document] = await db
+    .select()
+    .from(knowledgeDocument)
+    .where(
+      and(eq(knowledgeDocument.id, documentId), eq(knowledgeDocument.userId, userId)),
+    )
+    .limit(1)
 
-// export const listKnowledgeDocuments = async (
-//   userId: string,
-//   options?: {
-//     isStarred?: boolean
-//     search?: string
-//     limit?: number
-//     offset?: number
-//   },
-// ) => {
-//   const conditions = [
-//     eq(knowledgeDocument.userId, userId),
-//     or(eq(knowledgeDocument.isDeleted, false), eq(knowledgeDocument.isExample, true)),
-//   ]
+  return document || null
+}
 
-//   // if (options?.category) {
-//   //   conditions.push(eq(knowledgeDocument.category, options.category))
-//   // }
+export const listKnowledgeDocuments = async (
+  userId: string,
+  options?: {
+    isStarred?: boolean
+    search?: string
+    limit?: number
+    offset?: number
+  },
+) => {
+  const conditions = [
+    eq(knowledgeDocument.userId, userId),
+    or(eq(knowledgeDocument.isDeleted, false), eq(knowledgeDocument.isExample, true)),
+  ]
 
-//   if (options?.isStarred !== undefined) {
-//     conditions.push(eq(knowledgeDocument.isStarred, options.isStarred))
-//   }
+  if (options?.isStarred !== undefined) {
+    conditions.push(eq(knowledgeDocument.isStarred, options.isStarred))
+  }
 
-//   const query = db
-//     .select({
-//       id: knowledgeDocument.id,
-//       title: knowledgeDocument.title,
-//       type: knowledgeDocument.type,
-//       isStarred: knowledgeDocument.isStarred,
-//       sourceUrl: knowledgeDocument.sourceUrl,
-//       createdAt: knowledgeDocument.createdAt,
-//       updatedAt: knowledgeDocument.updatedAt,
-//       metadata: knowledgeDocument.metadata,
-//       s3Key: knowledgeDocument.s3Key,
-//       isExample: knowledgeDocument.isExample,
-//       isDeleted: knowledgeDocument.isDeleted,
-//       description: knowledgeDocument.description,
-//       sizeBytes: knowledgeDocument.sizeBytes,
-//       // content: sql<string>`SUBSTRING(${knowledgeDocument.content}, 1, 100)`,
-//     })
-//     .from(knowledgeDocument)
-//     .where(and(...conditions))
-//     .orderBy(desc(knowledgeDocument.updatedAt))
-//     .$dynamic()
+  if (options?.search) {
+    conditions.push(
+      or(
+        like(knowledgeDocument.title, `%${options.search}%`),
+        like(knowledgeDocument.description, `%${options.search}%`)
+      )
+    )
+  }
 
-//   if (options?.limit) {
-//     query.limit(options.limit)
-//   }
+  const query = db
+    .select({
+      id: knowledgeDocument.id,
+      title: knowledgeDocument.title,
+      type: knowledgeDocument.type,
+      isStarred: knowledgeDocument.isStarred,
+      sourceUrl: knowledgeDocument.sourceUrl,
+      createdAt: knowledgeDocument.createdAt,
+      updatedAt: knowledgeDocument.updatedAt,
+      metadata: knowledgeDocument.metadata,
+      s3Key: knowledgeDocument.s3Key,
+      isExample: knowledgeDocument.isExample,
+      isDeleted: knowledgeDocument.isDeleted,
+      description: knowledgeDocument.description,
+      sizeBytes: knowledgeDocument.sizeBytes,
+      fileName: knowledgeDocument.fileName,
+    })
+    .from(knowledgeDocument)
+    .where(and(...conditions))
+    .orderBy(desc(knowledgeDocument.updatedAt))
+    .$dynamic()
 
-//   if (options?.offset) {
-//     query.offset(options.offset)
-//   }
+  if (options?.limit) {
+    query.limit(options.limit)
+  }
 
-//   return await query
-// }
+  if (options?.offset) {
+    query.offset(options.offset)
+  }
 
-// export const deleteKnowledgeDocument = async (
-//   documentId: string,
-//   userId: string,
-// ): Promise<boolean> => {
-//   const result = await db
-//     .delete(knowledgeDocument)
-//     .where(
-//       and(eq(knowledgeDocument.id, documentId), eq(knowledgeDocument.userId, userId)),
-//     )
+  return await query
+}
 
-//   return !!result
-// }
-// /*  */
+export const deleteKnowledgeDocument = async (
+  documentId: string,
+  userId: string,
+): Promise<boolean> => {
+  const [result] = await db
+    .update(knowledgeDocument)
+    .set({ isDeleted: true, updatedAt: new Date() })
+    .where(
+      and(eq(knowledgeDocument.id, documentId), eq(knowledgeDocument.userId, userId)),
+    )
+    .returning()
+
+  return !!result
+}
