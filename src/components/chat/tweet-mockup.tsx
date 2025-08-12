@@ -7,19 +7,21 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { StreamingMessage } from './streaming-message'
 import { useSession } from '@/lib/auth-client'
+import { useTweets } from '@/hooks/use-tweets'
+import { $createParagraphNode, $createTextNode, $getRoot } from 'lexical'
 import toast from 'react-hot-toast'
 
 interface TweetMockupProps {
   text?: string
   content?: string
   isLoading?: boolean
-  onApply?: (text: string) => void
   children?: React.ReactNode
 }
 
 export const TweetMockup = memo(
-  ({ text, content, isLoading = false, onApply, children }: TweetMockupProps) => {
+  ({ text, content, isLoading = false, children }: TweetMockupProps) => {
     const { data: session } = useSession()
+    const { shadowEditor } = useTweets()
     const displayText = text || content || ''
 
     const containerVariants = {
@@ -39,8 +41,19 @@ export const TweetMockup = memo(
     }
 
     const handleApply = () => {
-      if (onApply && displayText) {
-        onApply(displayText)
+      if (displayText) {
+        shadowEditor.update(
+          () => {
+            const root = $getRoot()
+            const paragraph = $createParagraphNode()
+            const textNode = $createTextNode(displayText)
+
+            root.clear()
+            paragraph.append(textNode)
+            root.append(paragraph)
+          },
+          { tag: 'force-sync' },
+        )
         toast.success('Tweet applied')
       }
     }
@@ -80,7 +93,7 @@ export const TweetMockup = memo(
             </div>
           </div>
 
-          {!isLoading && onApply && (
+          {!isLoading && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

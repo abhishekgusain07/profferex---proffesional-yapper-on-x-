@@ -54,9 +54,51 @@ export type AIMessageDataType = {
     text: string
     status: 'processing' | 'streaming' | 'complete'
   }
+  'data-tool-output': {
+    text: string
+    status: 'processing' | 'streaming' | 'complete'
+  }
   'tweet-generation': {
     status: 'processing' | 'complete'
     tweet?: string
+  }
+}
+
+// ==================== Message Parts for AI SDK ====================
+
+export interface TextMessagePart {
+  type: 'text'
+  text: string
+}
+
+export interface DataToolOutputPart {
+  type: 'data-tool-output'
+  id: string
+  data: {
+    text: string
+    status: 'processing' | 'streaming' | 'complete'
+  }
+}
+
+export interface ToolReadWebsiteContentPart {
+  type: 'tool-readWebsiteContent'
+  state: 'input-available' | 'input-streaming' | 'complete'
+  output?: {
+    url: string
+    title: string
+    content: string
+  }
+}
+
+export type MessagePart = TextMessagePart | DataToolOutputPart | ToolReadWebsiteContentPart
+
+export interface ExtendedChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  parts: MessagePart[]
+  metadata?: {
+    attachments: Attachment[]
+    userMessage?: string
   }
 }
 

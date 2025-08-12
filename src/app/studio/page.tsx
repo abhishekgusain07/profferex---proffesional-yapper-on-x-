@@ -17,6 +17,8 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format } from 'date-fns'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import TweetEditor from '@/components/tweet-editor/tweet-editor'
+import { useTweets } from '@/hooks/use-tweets'
 
 const MAX_TWEET_LEN = 280
 
@@ -40,6 +42,7 @@ type LocalMedia = {
 
 const Studio = () => {
   const { data: session, isPending: sessionLoading } = useSession()
+  const { currentTweet, charCount, setTweetContent, setCharCount } = useTweets()
   const [lastTweetId, setLastTweetId] = useState<string | null>(null)
   const [media, setMedia] = useState<LocalMedia[]>([])
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined)
@@ -111,7 +114,7 @@ const Studio = () => {
     },
   })
 
-  const remaining = useMemo(() => MAX_TWEET_LEN - (form.watch('text')?.length || 0), [form.watch('text')])
+  const remaining = useMemo(() => MAX_TWEET_LEN - charCount, [charCount])
   const overLimit = remaining < 0
 
 
@@ -125,12 +128,12 @@ const Studio = () => {
   }
 
   // Handle form submission (post immediately)
-  const handleSubmit = (values: TweetFormValues) => {
-    postNow.mutate({ text: values.text.trim(), mediaIds })
+  const handleSubmit = () => {
+    postNow.mutate({ text: currentTweet.content.trim(), mediaIds })
   }
 
   // Handle scheduling tweets
-  const handleSchedule = (values: TweetFormValues) => {
+  const handleSchedule = () => {
     const scheduledUnix = getScheduledUnix()
     if (!scheduledUnix) {
       alert('Please select a valid date and time')
@@ -145,7 +148,7 @@ const Studio = () => {
     }
     
     scheduleTweet.mutate({
-      text: values.text.trim(),
+      text: currentTweet.content.trim(),
       scheduledUnix,
       mediaIds,
     })
@@ -387,14 +390,9 @@ const Studio = () => {
               )}
             </div>
 
-            {/* Tweet Textarea */}
+            {/* Tweet Editor */}
             <div className="text-stone-800 leading-relaxed mb-3">
-              <Textarea
-                {...form.register('text')}
-                placeholder="What's happening?"
-                className="w-full min-h-16 resize-none text-base leading-relaxed text-stone-800 border-none p-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none bg-transparent"
-                maxLength={MAX_TWEET_LEN + 50}
-              />
+              <TweetEditor />
             </div>
 
             {/* Media Files Display */}
@@ -560,7 +558,9 @@ const Studio = () => {
                   size="icon"
                   className="rounded-md p-2 h-auto w-auto"
                   onClick={() => {
-                    form.reset()
+                    // Reset the tweet editor content
+                    setTweetContent('')
+                    setCharCount(0)
                     setMedia([])
                   }}
                 >
@@ -620,11 +620,11 @@ const Studio = () => {
                   <>
                     {/* Post Button */}
                     <DuolingoButton
-                      onClick={form.handleSubmit(handleSubmit)}
+                      onClick={handleSubmit}
                       disabled={
                         postNow.isPending ||
                         overLimit ||
-                        !form.getValues('text')?.trim() ||
+                        !currentTweet.content.trim() ||
                         hasUploading
                       }
                       variant="primary"
@@ -640,7 +640,7 @@ const Studio = () => {
                       <DuolingoButton
                         onClick={() => {
                           // Add to queue logic
-                          const content = form.getValues('text')
+                          const content = currentTweet.content
                           if (content?.trim()) {
                             console.log('Add to queue:', content)
                           }
@@ -700,9 +700,9 @@ const Studio = () => {
                               />
                             </div>
                             <DuolingoButton
-                              onClick={form.handleSubmit(handleSchedule)}
+                              onClick={handleSchedule}
                               disabled={scheduleTweet.isPending || !scheduledDate || !scheduledTime || 
-                                      !form.getValues('text')?.trim() || hasUploading}
+                                      !currentTweet.content.trim() || hasUploading}
                               variant="primary"
                               size="md"
                               className="w-full"

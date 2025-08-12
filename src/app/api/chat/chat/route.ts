@@ -9,6 +9,8 @@ import {
   type UIMessage,
 } from 'ai'
 import { redis } from '@/lib/redis'
+import { createTweetTool } from '@/trpc/routers/chat/tools/create-tweet-tool'
+import { createReadWebsiteContentTool } from '@/lib/read-website-content'
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -20,11 +22,32 @@ const openai = createOpenAI({
 
 function buildSystemPrompt(): string {
   return `You are an AI assistant specialized in helping users create engaging Twitter/X posts.
-- Keep tweets under 280 characters when generating them
-- Be conversational and helpful
-- Ask clarifying questions when needed
-- Provide multiple options when appropriate
-- Be concise but informative`
+
+IMPORTANT: When users request tweet creation, you MUST use the createTweetTool. This includes any request like:
+- "draft a tweet"
+- "write a tweet about X"
+- "create a post about Y" 
+- "make a tweet"
+- "tweet about Z"
+- "help me write something about A"
+- "post about B"
+- "share thoughts on C"
+- "create content about D"
+- Or ANY similar request for content creation
+
+The createTweetTool will display tweets in a beautiful mockup format with an Apply button that users can use to transfer the content to their main editor.
+
+For tweet creation requests:
+1. ALWAYS use createTweetTool - never respond with plain text for tweets
+2. Keep content under 280 characters
+3. Make it engaging and authentic
+4. Include relevant hashtags/emojis when appropriate
+
+For non-tweet requests (general questions, explanations, etc.):
+- Respond normally with helpful text
+- Be conversational and informative
+
+Remember: If someone wants to create ANY type of social media content or post, use the createTweetTool!`
 }
 
 export async function POST(req: NextRequest) {
@@ -63,13 +86,45 @@ export async function POST(req: NextRequest) {
       execute: async ({ writer }) => {
         const useOpenRouter = Boolean(process.env.OPENROUTER_API_KEY)
         const model = useOpenRouter
-          ? openrouter.chat('z-ai/glm-4.5-air:free')
+          ? openrouter.chat('anthropic/claude-3.5-sonnet')
           : openai.chat('gpt-4o-mini')
+
+        // Create default account and style for tweet tool
+        const defaultAccount = {
+          name: 'User', // TODO: Get from auth context
+          username: 'user',
+        }
+
+        const defaultStyle = {
+          tone: 'engaging',
+          length: 'medium',
+          includeEmojis: true,
+          includeHashtags: false,
+          targetAudience: 'general',
+        }
+
+        const tweetTool = createTweetTool({
+          writer,
+          ctx: {
+            userContent: normalizedMessage.parts?.find((p: any) => p.type === 'text')?.text || '',
+            messages,
+            account: defaultAccount,
+            style: defaultStyle,
+          },
+        })
+
+        const readWebsiteContent = createReadWebsiteContentTool({ 
+          conversationId: id 
+        })
 
         const result = streamText({
           model,
           system: buildSystemPrompt(),
           messages: convertToModelMessages(messages as any),
+          tools: {
+            createTweetTool: tweetTool,
+            readWebsiteContent,
+          },
           temperature: 0.7,
         })
 

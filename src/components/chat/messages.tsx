@@ -7,6 +7,9 @@ import type { ChatMessage } from '@/types/chat'
 import { MessageWrapper } from './message-wrapper'
 import { LoadingMessage } from './loading-message'
 import { Loader } from '@/components/ui/loader'
+import { TweetMockup } from './tweet-mockup'
+import { StreamingMessage } from './streaming-message'
+import ReactMarkdown from 'react-markdown'
 
 interface MessagesProps {
   className?: string
@@ -64,20 +67,92 @@ export const Messages = memo(({ className }: MessagesProps) => {
       style={{ height: '100%', maxHeight: '100%' }}
     >
       <AnimatePresence mode="popLayout">
-        {messages.map((message, index) => (
-          <motion.div
-            key={message.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3, delay: index * 0.1 }}
-          >
-            <MessageWrapper 
-              message={message}
-              isLast={index === messages.length - 1}
-            />
-          </motion.div>
-        ))}
+        {messages.map((message, index) => {
+          // Handle AI SDK message format with parts
+          const aiMessage = message as any
+          const isUser = message.role === 'user'
+          
+          return (
+            <motion.div
+              key={message.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3, delay: index * 0.1 }}
+            >
+              {/* Check if message has parts (AI SDK format) */}
+              {aiMessage.parts && Array.isArray(aiMessage.parts) ? (
+                <div className={`group flex gap-3 relative ${isUser ? 'justify-end' : 'justify-start'}`}>
+                  {/* Avatar for assistant messages */}
+                  {!isUser && (
+                    <div className="flex-shrink-0">
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-sm">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className={`flex-1 max-w-[80%] space-y-3 ${isUser && 'flex justify-end'}`}>
+                    {aiMessage.parts.map((part: any, partIndex: number) => {
+                      // Handle data-tool-output parts (tweet mockups)
+                      if (part.type === 'data-tool-output') {
+                        if (part.data.status === 'processing') {
+                          return <TweetMockup key={partIndex} isLoading />
+                        }
+                        
+                        return (
+                          <TweetMockup key={partIndex} text={part.data.text}>
+                            <StreamingMessage content={part.data.text} />
+                          </TweetMockup>
+                        )
+                      }
+                      
+                      // Handle text parts
+                      if (part.type === 'text' && part.text) {
+                        return (
+                          <div 
+                            key={partIndex}
+                            className={`rounded-2xl px-4 py-3 shadow-sm ${
+                              isUser 
+                                ? 'bg-blue-500 text-white' 
+                                : 'bg-white border border-gray-200 text-gray-900'
+                            }`}
+                          >
+                            <StreamingMessage 
+                              content={part.text}
+                              isStreaming={index === messages.length - 1 && message.role === 'assistant'}
+                            />
+                          </div>
+                        )
+                      }
+                      
+                      return null
+                    })}
+                  </div>
+                  
+                  {/* Avatar for user messages */}
+                  {isUser && (
+                    <div className="flex-shrink-0">
+                      <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center shadow-sm">
+                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Fallback to old MessageWrapper for messages without parts */
+                <MessageWrapper 
+                  message={message}
+                  isLast={index === messages.length - 1}
+                />
+              )}
+            </motion.div>
+          )
+        })}
       </AnimatePresence>
 
       {/* Loading indicator for when AI is responding */}

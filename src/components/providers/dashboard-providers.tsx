@@ -2,6 +2,7 @@
 
 import { ChatProvider } from '@/hooks/use-chat'
 import { AttachmentsProvider } from '@/hooks/use-attachments'
+import { TweetProvider } from '@/hooks/use-tweets'
 import { ReactNode } from 'react'
 
 interface ProvidersProps {
@@ -11,7 +12,9 @@ interface ProvidersProps {
 export function DashboardProviders({ children }: ProvidersProps) {
   return (
     <AttachmentsProvider>
-      <ChatProvider>{children}</ChatProvider>
+      <TweetProvider>
+        <ChatProvider>{children}</ChatProvider>
+      </TweetProvider>
     </AttachmentsProvider>
   )
 }
