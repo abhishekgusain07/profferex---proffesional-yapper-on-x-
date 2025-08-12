@@ -112,6 +112,7 @@ export interface ChatContextType {
   // Chat state
   isLoading: boolean
   isStreaming: boolean
+  status: 'idle' | 'loading'
   error: string | null
   
   // Actions
@@ -127,6 +128,7 @@ export interface ChatContextType {
   
   // Stop streaming
   stop: () => void
+  stopGeneration: () => void
 }
 
 // ==================== API Request/Response Types ====================

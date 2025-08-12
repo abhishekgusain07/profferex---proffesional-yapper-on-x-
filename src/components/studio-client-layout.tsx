@@ -2,6 +2,7 @@
 
 import { PropsWithChildren } from 'react'
 import { LeftSidebar } from '@/components/left-sidebar'
+import { AppSidebar } from '@/components/app-sidebar'
 import { AppSidebarInset } from '@/components/providers/app-sidebar-inset'
 import { DashboardProviders } from '@/components/providers/dashboard-providers'
 import { SidebarProvider } from '@/components/ui/sidebar'
@@ -35,7 +36,9 @@ export default function StudioClientLayout({
           {hideAppSidebar ? (
             <AppSidebarInset>{children}</AppSidebarInset>
           ) : (
-            <AppSidebarInset>{children}</AppSidebarInset>
+            <AppSidebar>
+              <AppSidebarInset>{children}</AppSidebarInset>
+            </AppSidebar>
           )}
         </SidebarProvider>
       </div>

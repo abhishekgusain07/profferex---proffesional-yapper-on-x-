@@ -95,21 +95,38 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
     chat.stop()
   }, [chat])
 
+  const startNewConversation = useCallback(() => {
+    const newChatId = nanoid()
+    chatIdRef.current = newChatId
+    clearChat()
+  }, [clearChat])
+
+  const loadConversation = useCallback(async (conversationId: string) => {
+    chatIdRef.current = conversationId
+    // The useQuery will automatically refetch with the new chatId
+  }, [])
+
+  const stopGeneration = useCallback(() => {
+    chat.stop()
+  }, [chat])
+
   const contextValue: ChatContextType = useMemo(() => ({
     conversationId: chatId,
     messages: transformedMessages,
     isLoading: chat.status === 'submitted' || chat.status === 'streaming',
     isStreaming: chat.status === 'streaming',
+    status: chat.status === 'submitted' || chat.status === 'streaming' ? 'loading' : 'idle',
     error: null,
     sendMessage,
     regenerateResponse: async () => {},
     clearChat,
-    startNewConversation: () => {},
-    loadConversation: async () => {},
+    startNewConversation,
+    loadConversation,
     deleteMessage: async () => {},
     editMessage: async () => {},
     stop,
-  }), [chatId, transformedMessages, chat.status, sendMessage, clearChat, stop])
+    stopGeneration,
+  }), [chatId, transformedMessages, chat.status, sendMessage, clearChat, startNewConversation, loadConversation, stop, stopGeneration])
 
   return (
     <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
@@ -123,14 +140,22 @@ export function useChatContext(): ChatContextType {
 }
 
 export function useChatConversations() {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['chat-conversations'],
+    queryFn: async () => {
+      // Mock data for now - replace with actual tRPC call when ready
+      return { conversations: [], total: 0, hasMore: false }
+    },
+  })
+
   return {
-    conversations: [],
-    isLoading: false,
-    hasMore: false,
-    total: 0,
+    conversations: data?.conversations || [],
+    isLoading,
+    hasMore: data?.hasMore || false,
+    total: data?.total || 0,
     deleteConversation: async () => {},
     loadMore: () => {},
-    refetch: async () => {},
+    refetch,
   }
 }
 
