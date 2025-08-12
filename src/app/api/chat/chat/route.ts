@@ -50,6 +50,24 @@ For non-tweet requests (general questions, explanations, etc.):
 Remember: If someone wants to create ANY type of social media content or post, use the createTweetTool!`
 }
 
+// Safely extract user text from a UIMessage's parts
+function extractTextFromMessage(message: UIMessage): string {
+  const parts: unknown[] = (message as any).parts ?? []
+  const texts: string[] = []
+  for (const part of parts) {
+    if (
+      part &&
+      typeof part === 'object' &&
+      'type' in (part as any) &&
+      (part as any).type === 'text' &&
+      'text' in (part as any)
+    ) {
+      texts.push(String((part as any).text ?? ''))
+    }
+  }
+  return texts.join('\n').trim()
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -106,7 +124,7 @@ export async function POST(req: NextRequest) {
         const tweetTool = createTweetTool({
           writer,
           ctx: {
-            userContent: normalizedMessage.parts?.find((p: any) => p.type === 'text')?.text || '',
+            userContent: extractTextFromMessage(normalizedMessage),
             messages,
             account: defaultAccount,
             style: defaultStyle,
