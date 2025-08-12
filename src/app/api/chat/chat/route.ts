@@ -6,6 +6,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   streamText,
+  type UIMessage,
 } from 'ai'
 import { redis } from '@/lib/redis'
 
@@ -39,18 +40,30 @@ export async function POST(req: NextRequest) {
     }
 
     const historyKey = `chat:history:${id}`
-    const history = (await redis.get(historyKey)) as any[] | null
-    const messages = [...(history ?? []), message]
+    const history = (await redis.get(historyKey)) as UIMessage[] | null
+
+    // Normalize incoming message to UIMessage format if needed
+    const normalizedMessage: UIMessage =
+      message && typeof message === 'object' && 'parts' in message
+        ? (message as UIMessage)
+        : {
+            role: 'user',
+            id: `msg_${Date.now()}`,
+            parts: [{ type: 'text', text: String(message.text ?? message.content ?? '') }],
+            metadata: message.metadata,
+          }
+
+    const messages = [...(history ?? []), normalizedMessage]
 
     const stream = createUIMessageStream({
       originalMessages: messages,
       onFinish: async ({ messages }) => {
-        await redis.set(historyKey, messages)
+        await redis.set(historyKey, messages as any)
       },
       execute: async ({ writer }) => {
         const useOpenRouter = Boolean(process.env.OPENROUTER_API_KEY)
         const model = useOpenRouter
-          ? openrouter.chat('anthropic/claude-3.5-sonnet')
+          ? openrouter.chat('z-ai/glm-4.5-air:free')
           : openai.chat('gpt-4o-mini')
 
         const result = streamText({
@@ -58,7 +71,6 @@ export async function POST(req: NextRequest) {
           system: buildSystemPrompt(),
           messages: convertToModelMessages(messages as any),
           temperature: 0.7,
-          maxTokens: 800,
         })
 
         writer.merge(result.toUIMessageStream())

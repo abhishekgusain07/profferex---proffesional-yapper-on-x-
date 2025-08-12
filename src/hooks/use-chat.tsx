@@ -32,7 +32,9 @@ interface ChatProviderProps extends PropsWithChildren {
 }
 
 export function ChatProvider({ children, initialConversationId }: ChatProviderProps) {
-  const chatId = initialConversationId ?? nanoid()
+  // Stabilize chatId across renders
+  const chatIdRef = useRef<string>(initialConversationId ?? nanoid())
+  const chatId = chatIdRef.current
 
   const chat = useChat<any>({
     id: chatId,
@@ -81,11 +83,7 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
 
   // Memoize callback functions to prevent unnecessary re-renders
   const sendMessage = useCallback(async (content: string, metadata?: MessageMetadata) => {
-    await chat.sendMessage({
-      role: 'user',
-      parts: [{ type: 'text', text: content }],
-      metadata,
-    } as never)
+    await chat.sendMessage({ text: content, metadata } as never)
   }, [chat])
 
   const clearChat = useCallback(() => {
