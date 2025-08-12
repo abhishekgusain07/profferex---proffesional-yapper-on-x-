@@ -7,23 +7,35 @@ import type {
   ChatAttachment, 
   KnowledgeAttachment 
 } from '@/types/chat'
+import { SelectedKnowledgeDocument } from '@/components/knowledge-selector'
 import toast from 'react-hot-toast'
+
+export interface LocalAttachment {
+  variant: 'chat'
+  id: string
+  title: string
+  type: 'image' | 'pdf' | 'docx' | 'txt' | 'video' | 'manual'
+  localUrl?: string
+  uploadProgress: number
+  isUploading: boolean
+  error?: string
+}
 
 interface AttachmentsContextType {
   // State
-  attachments: Attachment[]
+  attachments: (Attachment | LocalAttachment)[]
   hasUploading: boolean
   
   // Actions
   addChatAttachment: (file: File) => void
-  addKnowledgeAttachment: (doc: { id: string; title: string; content?: string }) => void
+  addKnowledgeAttachment: (doc: SelectedKnowledgeDocument) => void
   addVideoAttachment: (fileKey: string, title: string) => void
   removeAttachment: (params: { id: string }) => void
   clearAttachments: () => void
   
   // Utils
-  getAttachmentById: (id: string) => Attachment | undefined
-  getAttachmentsByType: (type: Attachment['type']) => Attachment[]
+  getAttachmentById: (id: string) => Attachment | LocalAttachment | undefined
+  getAttachmentsByType: (type: Attachment['type']) => (Attachment | LocalAttachment)[]
 }
 
 const AttachmentsContext = createContext<AttachmentsContextType | null>(null)
@@ -107,12 +119,12 @@ async function uploadFile(file: File): Promise<{ fileKey: string; uploadProgress
 }
 
 export function AttachmentsProvider({ children }: PropsWithChildren) {
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [attachments, setAttachments] = useState<(Attachment | LocalAttachment)[]>([])
 
   // Check if any attachments are currently uploading
   const hasUploading = attachments.some(
-    (attachment): attachment is ChatAttachment => 
-      attachment.variant === 'chat' && (attachment.isUploading || false)
+    (attachment): attachment is LocalAttachment => 
+      'isUploading' in attachment && attachment.isUploading
   )
 
   // Add chat attachment (file upload)
@@ -167,20 +179,18 @@ export function AttachmentsProvider({ children }: PropsWithChildren) {
   }, [])
 
   // Add knowledge attachment (existing document/content)
-  const addKnowledgeAttachment = useCallback((doc: { id: string; title: string; content?: string }) => {
+  const addKnowledgeAttachment = useCallback((doc: SelectedKnowledgeDocument) => {
     const attachment: KnowledgeAttachment = {
-      id: nanoid(),
+      id: doc.id,
       title: doc.title,
-      type: doc.content ? 'txt' : 'manual',
+      type: doc.type,
       variant: 'knowledge',
-      content: doc.content,
+      content: doc.description,
     }
 
     setAttachments(prev => {
       // Check if already exists
-      const exists = prev.some(att => 
-        att.variant === 'knowledge' && att.title === doc.title
-      )
+      const exists = prev.some(att => att.id === doc.id)
       
       if (exists) {
         toast.error('This document is already attached')
