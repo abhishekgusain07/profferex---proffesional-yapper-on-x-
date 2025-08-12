@@ -51,10 +51,16 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
   })
 
   const { data } = useQuery({
-    queryKey: ['initial-messages', chatId],
+    queryKey: ['chat-history', chatId],
     queryFn: async () => {
-      const res = await fetch(`/api/chat/get_message_history?chatId=${chatId}`)
-      return (await res.json()) as { messages: unknown[] }
+      try {
+        const res = await fetch(`/api/chat/get_message_history?chatId=${chatId}`)
+        if (!res.ok) return EMPTY_MESSAGES
+        return (await res.json()) as { messages: unknown[] }
+      } catch (error) {
+        console.error('Failed to fetch chat history:', error)
+        return EMPTY_MESSAGES
+      }
     },
     initialData: EMPTY_MESSAGES,
   })
@@ -143,17 +149,50 @@ export function useChatConversations() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['chat-conversations'],
     queryFn: async () => {
-      // Mock data for now - replace with actual tRPC call when ready
-      return { conversations: [], total: 0, hasMore: false }
+      try {
+        // For now return mock data - this will be replaced with tRPC call
+        const mockConversations = [
+          {
+            id: 'conv-1',
+            title: 'Twitter Strategy Discussion',
+            lastUpdated: '2024-08-12T09:30:00Z',
+            messageCount: 5,
+          },
+          {
+            id: 'conv-2', 
+            title: 'Content Ideas for Tech Blog',
+            lastUpdated: '2024-08-11T14:20:00Z',
+            messageCount: 3,
+          },
+        ]
+        return { 
+          conversations: mockConversations, 
+          total: mockConversations.length, 
+          hasMore: false 
+        }
+      } catch (error) {
+        console.error('Failed to fetch conversations:', error)
+        return { conversations: [], total: 0, hasMore: false }
+      }
     },
   })
+
+  const deleteConversation = useCallback(async (conversationId: string) => {
+    try {
+      // TODO: Implement with tRPC
+      console.log('Deleting conversation:', conversationId)
+      await refetch()
+    } catch (error) {
+      console.error('Failed to delete conversation:', error)
+    }
+  }, [refetch])
 
   return {
     conversations: data?.conversations || [],
     isLoading,
     hasMore: data?.hasMore || false,
     total: data?.total || 0,
-    deleteConversation: async () => {},
+    deleteConversation,
     loadMore: () => {},
     refetch,
   }

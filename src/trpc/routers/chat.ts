@@ -6,28 +6,26 @@ import { nanoid } from 'nanoid'
 import { Ratelimit } from '@upstash/ratelimit'
 import { 
   streamText, 
-  convertToCoreMessages, 
   type CoreMessage,
 } from 'ai'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { createOpenAI } from '@ai-sdk/openai'
+import { createReadWebsiteContentTool } from '@/lib/read-website-content'
 import type {
   ChatMessage,
-  ChatConversation,
   ChatHistoryItem,
   MessageMetadata,
-  Attachment,
   RateLimitInfo,
 } from '@/types/chat'
 
-// AI Provider setup
-const openrouter = createOpenRouter({
+// AI Provider setup - only initialize if API keys are available
+const openrouter = process.env.OPENROUTER_API_KEY ? createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
-})
+}) : null
 
-const openai = createOpenAI({
+const openai = process.env.OPENAI_API_KEY ? createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-})
+}) : null
 
 // Rate limiting setup
 const chatRateLimit = new Ratelimit({
@@ -205,6 +203,14 @@ function buildSystemPrompt(): string {
 3. Help brainstorm ideas based on user interests, industry, or topics
 4. Ensure content follows Twitter best practices (character limits, engagement tactics)
 5. Adapt to the user's writing style and voice
+6. Analyze and discuss website content when users share URLs
+
+Capabilities:
+- Generate tweet content up to 280 characters
+- Read and analyze website content from URLs
+- Provide feedback on existing tweets
+- Suggest improvements and optimizations
+- Help with content strategy and planning
 
 Guidelines:
 - Keep tweets under 280 characters when generating them
@@ -213,6 +219,8 @@ Guidelines:
 - Provide multiple options when appropriate
 - Consider current trends and best practices for social media engagement
 - Be concise but informative in your responses
+- When users share URLs, use the readWebsiteContent tool to analyze the content and provide insights
+- Offer to create tweets based on website content when relevant
 
 When generating tweets, format them clearly and indicate they are tweet suggestions.`
 }
@@ -248,7 +256,7 @@ export const chatRouter = createTRPCRouter({
         content,
         chatId: activeConversationId,
         createdAt: new Date(),
-        metadata,
+        metadata: metadata as MessageMetadata,
       }
       
       // Save user message
@@ -263,37 +271,62 @@ export const chatRouter = createTRPCRouter({
           role: 'system',
           content: buildSystemPrompt(),
         },
-        ...convertToCoreMessages(
-          previousMessages.map(msg => ({
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content,
-          }))
-        ),
+        ...previousMessages.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        })),
       ]
       
       try {
+        // Check if we have any AI provider available
+        if (!openrouter && !openai) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'No AI provider configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY.',
+          })
+        }
+        
         // Use OpenRouter or OpenAI based on availability
-        const aiProvider = process.env.OPENROUTER_API_KEY ? openrouter : openai
-        const model = process.env.OPENROUTER_API_KEY 
+        const aiProvider = openrouter || openai
+        const model = openrouter 
           ? 'anthropic/claude-3.5-sonnet' 
           : 'gpt-4o-mini'
         
-        const result = await streamText({
-          model: aiProvider(model),
-          messages: coreMessages,
-          temperature: 0.7,
-          maxTokens: 1000,
+        // Create tools
+        const readWebsiteContent = createReadWebsiteContentTool({ 
+          conversationId: activeConversationId 
         })
         
-        // Get the response text
+        const result = await streamText({
+          model: aiProvider!(model),
+          messages: coreMessages,
+          tools: {
+            readWebsiteContent,
+          },
+          temperature: 0.7,
+        })
+        
+        // Get the response text and handle tool calls
         const responseText = await result.text
+        const toolCalls = await result.toolCalls || []
+        
+        // Process any tool calls and append results to the response
+        let finalResponseText = responseText
+        if (toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
+            if (toolCall.toolName === 'readWebsiteContent' && toolCall.result) {
+              const websiteData = toolCall.result as { url: string; title: string; content: string }
+              finalResponseText += `\n\n[WEBSITE_CONTENT]${JSON.stringify(websiteData)}[/WEBSITE_CONTENT]`
+            }
+          }
+        }
         
         // Create assistant message
         const assistantMessageId = nanoid()
         const assistantMessage: ChatMessage = {
           id: assistantMessageId,
           role: 'assistant',
-          content: responseText,
+          content: finalResponseText,
           chatId: activeConversationId,
           createdAt: new Date(),
         }

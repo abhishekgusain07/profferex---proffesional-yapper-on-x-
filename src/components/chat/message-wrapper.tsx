@@ -7,10 +7,12 @@ import type { ChatMessage } from '@/types/chat'
 import { useChatContext } from '@/hooks/use-chat'
 import { StreamingMessage } from './streaming-message'
 import { TweetMockup } from './tweet-mockup'
+import { WebsiteMockup } from './website-mockup'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
+import ReactMarkdown from 'react-markdown'
 
 interface MessageWrapperProps {
   message: ChatMessage
@@ -25,11 +27,28 @@ export function MessageWrapper({ message, isLast }: MessageWrapperProps) {
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
 
+  // Parse website content from message
+  const parseWebsiteContent = (content: string) => {
+    const websiteMatches = content.match(/\[WEBSITE_CONTENT\](.*?)\[\/WEBSITE_CONTENT\]/gs)
+    if (!websiteMatches) return { content, websiteContent: null }
+    
+    const cleanContent = content.replace(/\[WEBSITE_CONTENT\].*?\[\/WEBSITE_CONTENT\]/gs, '').trim()
+    
+    try {
+      const websiteData = JSON.parse(websiteMatches[0].replace(/\[WEBSITE_CONTENT\]|\[\/WEBSITE_CONTENT\]/g, ''))
+      return { content: cleanContent, websiteContent: websiteData }
+    } catch {
+      return { content, websiteContent: null }
+    }
+  }
+
+  const { content: displayContent, websiteContent } = parseWebsiteContent(message.content)
+
   // Check if message contains a tweet (simple heuristic)
   const containsTweet = isAssistant && (
-    message.content.includes('Tweet:') ||
-    message.content.includes('🐦') ||
-    (message.content.length <= 280 && message.content.includes('#'))
+    displayContent.includes('Tweet:') ||
+    displayContent.includes('🐦') ||
+    (displayContent.length <= 280 && displayContent.includes('#'))
   )
 
   const handleCopy = async () => {
@@ -108,15 +127,35 @@ export function MessageWrapper({ message, isLast }: MessageWrapperProps) {
             </div>
           )}
 
-          {/* Message content with streaming or tweet display */}
-          {containsTweet ? (
-            <TweetMockup content={message.content} />
-          ) : (
-            <StreamingMessage 
-              content={message.content}
-              isStreaming={isLast && message.role === 'assistant'}
-            />
-          )}
+          {/* Message content with streaming, tweet, or website display */}
+          <div className="space-y-3">
+            {/* Website content preview */}
+            {websiteContent && (
+              <WebsiteMockup
+                url={websiteContent.url}
+                title={websiteContent.title}
+              >
+                <div className="line-clamp-3">
+                  <ReactMarkdown>
+                    {websiteContent.content.slice(0, 250)}
+                    {websiteContent.content.length > 250 && '...'}
+                  </ReactMarkdown>
+                </div>
+              </WebsiteMockup>
+            )}
+            
+            {/* Main message content */}
+            {displayContent && (
+              containsTweet ? (
+                <TweetMockup content={displayContent} />
+              ) : (
+                <StreamingMessage 
+                  content={displayContent}
+                  isStreaming={isLast && message.role === 'assistant'}
+                />
+              )
+            )}
+          </div>
 
           {/* Timestamp */}
           <div className={cn(

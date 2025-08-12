@@ -13,6 +13,7 @@ require('@testing-library/jest-dom')
 // Set test environment variables
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test'
 process.env.NODE_ENV = 'test'
+process.env.FIRECRAWL_API_KEY = 'test-api-key'
 
 // Mock superjson to avoid ES module issues
 jest.mock('superjson', () => ({
