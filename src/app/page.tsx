@@ -1,14 +1,14 @@
+'use client'
+
 import Navbar from '@/components/navbar'
 import DuolingoButton from '@/components/ui/duolingo-button'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { useSessionContext } from '@/components/session-provider'
+import { signOut } from '@/lib/auth-client'
 import Link from 'next/link'
 import Script from 'next/script'
 
-const Page = async () => {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+const Page = () => {
+  const { session } = useSessionContext()
 
   return (
     <>
@@ -51,11 +51,19 @@ const Page = async () => {
                   <div className="max-w-lg w-full mt-8 flex flex-col gap-4 items-center">
                     <div className="flex mt-4 flex-col gap-2 max-w-sm w-full">
                       {session?.user ? (
-                        <Link href="/studio">
-                          <DuolingoButton className="w-full h-12 sm:px-8">
-                            Start Posting More →
+                        <div className="space-y-2">
+                          <Link href="/studio">
+                            <DuolingoButton className="w-full h-12 sm:px-8">
+                              Go to Studio →
+                            </DuolingoButton>
+                          </Link>
+                          <DuolingoButton 
+                            className="w-full h-12 sm:px-8 bg-gray-500 hover:bg-gray-600" 
+                            onClick={() => signOut()}
+                          >
+                            Logout
                           </DuolingoButton>
-                        </Link>
+                        </div>
                       ) : (
                         <Link href="/sign-up">
                           <DuolingoButton className="w-full h-12 sm:px-8">

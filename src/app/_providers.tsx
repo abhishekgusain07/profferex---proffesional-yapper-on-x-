@@ -5,10 +5,21 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { AccountProvider } from '@/hooks/use-account'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
 
-export function Providers({ children }: { children: React.ReactNode }) {
+interface ProvidersProps {
+  children: React.ReactNode
+  initialSession?: {
+    user?: {
+      id: string
+      email: string
+      name?: string
+    }
+  } | null
+}
+
+export function Providers({ children, initialSession }: ProvidersProps) {
   return (
     <NuqsAdapter>
-      <TRPCProvider>
+      <TRPCProvider initialSession={initialSession}>
         <AccountProvider>
           {children}
           {/* Only show DevTools in development */}

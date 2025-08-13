@@ -4,10 +4,11 @@ import type { QueryClient } from '@tanstack/react-query'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { httpBatchLink } from '@trpc/client'
 import { createTRPCReact } from '@trpc/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { makeQueryClient } from './query-client'
 import type { AppRouter } from './routers/_app'
 import superjson from 'superjson'
+import { SessionProvider } from '@/components/session-provider'
 
 export const trpc = createTRPCReact<AppRouter>()
 
@@ -31,7 +32,18 @@ function getUrl() {
   return `${base}/api/trpc`
 }
 
-export function TRPCProvider({ children }: { children: React.ReactNode }) {
+interface TRPCProviderProps {
+  children: React.ReactNode
+  initialSession?: {
+    user?: {
+      id: string
+      email: string
+      name?: string
+    }
+  } | null
+}
+
+export function TRPCProvider({ children, initialSession }: TRPCProviderProps) {
   // NOTE: Avoid useState when initializing the query client if you don't
   //       have a suspense boundary between this and the code that may
   //       suspend because React will throw away the client on the initial
@@ -55,10 +67,18 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
     })
   )
 
+  useEffect(() => {
+    if (initialSession) {
+      queryClient.setQueryData(['session'], initialSession)
+    }
+  }, [initialSession, queryClient])
+
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        {children}
+        <SessionProvider initialSession={initialSession}>
+          {children}
+        </SessionProvider>
       </QueryClientProvider>
     </trpc.Provider>
   )
