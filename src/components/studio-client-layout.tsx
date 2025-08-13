@@ -13,6 +13,10 @@ interface LayoutProps extends PropsWithChildren {
   hideAppSidebar?: boolean
   width: any
   state: any
+  initialTwitterData?: {
+    accounts?: any[] | null
+    activeAccount?: any | null
+  } | null
 }
 
 const initialConfig = {
@@ -47,6 +51,7 @@ export default function StudioClientLayout({
   width,
   state,
   hideAppSidebar,
+  initialTwitterData,
 }: LayoutProps) {
   let defaultOpen = true
 
@@ -55,7 +60,7 @@ export default function StudioClientLayout({
   }
 
   return (
-    <DashboardProviders>
+    <DashboardProviders initialTwitterData={initialTwitterData}>
       <div className="flex">
         <SidebarProvider className="w-fit" defaultOpen={false}>
           <LeftSidebar />

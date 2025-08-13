@@ -2,6 +2,7 @@
 
 import { trpc } from '@/trpc/client'
 import { useSession } from '@/lib/auth-client'
+import { useTwitterData } from '@/providers/twitter-data-provider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +48,7 @@ const TweetCard = ({ name, username, src, text }: TweetCardProps) => {
 
 const AccountsPage = () => {
   const { data: session, isPending: sessionLoading } = useSession()
+  const { accounts: twitterAccounts, activeAccount, isLoading: twitterDataLoading } = useTwitterData()
   const [connectingTwitter, setConnectingTwitter] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [accountToDelete, setAccountToDelete] = useState<{ id: string; name: string } | null>(null)
@@ -58,15 +60,20 @@ const AccountsPage = () => {
   const [prompt, setPrompt] = useState('')
   const [isStyleSettingsOpen, setIsStyleSettingsOpen] = useState(false)
 
-  const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
+  // Use tRPC queries with initial data for operations that need refetch
+  const twitterAccountsQuery = trpc.twitter.getAccounts.useQuery(
     undefined,
-    { enabled: !!session }
+    { enabled: !!session, initialData: twitterAccounts }
   )
 
-  const { data: activeAccount } = trpc.twitter.getActiveAccount.useQuery(
+  const activeAccountQuery = trpc.twitter.getActiveAccount.useQuery(
     undefined,
-    { enabled: !!session }
+    { enabled: !!session, initialData: activeAccount }
   )
+
+  // Maintain compatibility with existing code
+  const accountsLoading = twitterDataLoading
+  const refetchAccounts = twitterAccountsQuery.refetch
 
   const createTwitterLink = trpc.twitter.createLink.useQuery(
     { action: 'add-account' },

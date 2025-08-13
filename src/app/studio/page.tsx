@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { trpc } from '@/trpc/client'
 import { useSession, signOut } from '@/lib/auth-client'
+import { useTwitterData } from '@/providers/twitter-data-provider'
 import { Button } from '@/components/ui/button'
 import DuolingoButton from '@/components/ui/duolingo-button'
 import { Input } from '@/components/ui/input'
@@ -42,6 +43,7 @@ type LocalMedia = {
 
 const Studio = () => {
   const { data: session, isPending: sessionLoading } = useSession()
+  const { accounts: twitterAccounts, activeAccount, isLoading: twitterDataLoading } = useTwitterData()
   const { currentTweet, charCount, setTweetContent, setCharCount } = useTweets()
   const [lastTweetId, setLastTweetId] = useState<string | null>(null)
   const [media, setMedia] = useState<LocalMedia[]>([])
@@ -60,20 +62,28 @@ const Studio = () => {
     { enabled: false }
   )
 
-  const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
+  // Use the traditional tRPC refetch functions for operations that need them
+  const twitterAccountsQuery = trpc.twitter.getAccounts.useQuery(
     undefined,
-    { enabled: !!session }
+    { enabled: !!session, initialData: twitterAccounts }
   )
-
-  const { data: activeAccount, isLoading: activeAccountLoading, refetch: refetchActiveAccount } = trpc.twitter.getActiveAccount.useQuery(
+  
+  const activeAccountQuery = trpc.twitter.getActiveAccount.useQuery(
     undefined,
     { 
       enabled: !!session,
+      initialData: activeAccount,
       refetchOnWindowFocus: true,
       refetchOnMount: true,
-      staleTime: 0, // Always refetch to ensure latest active account
+      staleTime: 0,
     }
   )
+
+  // Maintain the original variable names for compatibility
+  const accountsLoading = twitterDataLoading
+  const activeAccountLoading = twitterDataLoading
+  const refetchAccounts = twitterAccountsQuery.refetch
+  const refetchActiveAccount = activeAccountQuery.refetch
 
   // tRPC mutations
 
