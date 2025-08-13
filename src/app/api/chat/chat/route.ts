@@ -105,7 +105,35 @@ export async function POST(req: NextRequest) {
     const stream = createUIMessageStream({
       originalMessages: messages,
       onFinish: async ({ messages }) => {
+        // Save messages to Redis
         await redis.set(historyKey, messages as any)
+        
+        // Update chat history list
+        try {
+          const historyKey = `chat:history-list:user@example.com` // TODO: Get from auth context
+          const existingHistory = (await redis.get<Array<{id: string, title: string, lastUpdated: string}>>(historyKey)) || []
+          
+          // Get title from first user message
+          const firstUserMessage = messages.find((m: any) => m.role === 'user')
+          const title = firstUserMessage?.metadata?.userMessage || 
+                      (firstUserMessage?.parts?.[0]?.text || 'New Conversation').slice(0, 50)
+          
+          const chatHistoryItem = {
+            id,
+            title: title + (title.length > 50 ? '...' : ''),
+            lastUpdated: new Date().toISOString(),
+          }
+          
+          // Remove existing entry and add new one at the beginning
+          const updatedHistory = [
+            chatHistoryItem,
+            ...existingHistory.filter((item) => item.id !== id),
+          ]
+          
+          await redis.set(historyKey, updatedHistory.slice(0, 20)) // Keep only last 20 chats
+        } catch (error) {
+          console.error('Failed to update chat history list:', error)
+        }
       },
       execute: async ({ writer }) => {
         const useOpenRouter = Boolean(process.env.OPENROUTER_API_KEY)

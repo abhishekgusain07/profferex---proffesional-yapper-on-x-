@@ -1,443 +1,165 @@
 import { z } from 'zod'
 import { createTRPCRouter, protectedProcedure } from '../init'
+import { db } from '@/db'
+import { chatConversations, chatMessages } from '@/db/schema'
 import { redis } from '@/lib/redis'
 import { TRPCError } from '@trpc/server'
 import { nanoid } from 'nanoid'
 import { Ratelimit } from '@upstash/ratelimit'
-import { 
-  streamText, 
-  type CoreMessage,
-} from 'ai'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createReadWebsiteContentTool } from '@/lib/read-website-content'
-import type {
-  ChatMessage,
-  ChatHistoryItem,
-  MessageMetadata,
-  RateLimitInfo,
-} from '@/types/chat'
+import { eq, desc, and } from 'drizzle-orm'
 
-// AI Provider setup - only initialize if API keys are available
-const openrouter = process.env.OPENROUTER_API_KEY ? createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-}) : null
+// Types for the API (matching the open source pattern)
+export interface MyUIMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  parts: Array<{
+    type: string
+    text?: string
+    data?: {
+      text: string
+      status: string
+    }
+  }>
+  metadata?: {
+    userMessage?: string
+    editorContent?: string
+    attachments?: Array<{
+      id: string
+      title?: string
+      type: string
+      variant: string
+      fileKey?: string
+      content?: string
+    }>
+  }
+}
 
-const openai = process.env.OPENAI_API_KEY ? createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-}) : null
+export interface ChatHistoryItem {
+  id: string
+  title: string
+  lastUpdated: string
+}
 
 // Rate limiting setup
 const chatRateLimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(10, '1h'), // 10 messages per hour for free users
-})
-
-const chatRateLimitPro = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(100, '1h'), // 100 messages per hour for pro users
-})
-
-// Validation schemas
-const messageMetadataSchema = z.object({
-  attachments: z.array(z.object({
-    id: z.string(),
-    title: z.string().optional(),
-    type: z.enum(['url', 'txt', 'docx', 'pdf', 'image', 'manual', 'video']),
-    variant: z.enum(['knowledge', 'chat']),
-    fileKey: z.string().optional(),
-    content: z.string().optional(),
-  })).optional(),
-  userMessage: z.string().optional(),
-  editorContent: z.string().optional(),
-  timestamp: z.number().optional(),
-})
-
-const sendMessageSchema = z.object({
-  content: z.string().min(1).max(4000),
-  conversationId: z.string().optional(),
-  metadata: messageMetadataSchema.optional(),
-})
-
-const getHistorySchema = z.object({
-  conversationId: z.string(),
-  limit: z.number().min(1).max(100).default(50),
-  offset: z.number().min(0).default(0),
-})
-
-const getConversationsSchema = z.object({
-  limit: z.number().min(1).max(50).default(20),
-  offset: z.number().min(0).default(0),
+  limiter: Ratelimit.slidingWindow(50, '1h'),
 })
 
 // Helper functions
-async function checkRateLimit(userId: string, isPro: boolean = false): Promise<RateLimitInfo> {
-  const limiter = isPro ? chatRateLimitPro : chatRateLimit
-  const result = await limiter.limit(userId)
-  
-  return {
-    success: result.success,
-    limit: result.limit,
-    remaining: result.remaining,
-    reset: result.reset,
-  }
+async function saveMessagesToRedis(chatId: string, messages: MyUIMessage[]): Promise<void> {
+  await redis.set(`chat:history:${chatId}`, messages, { ex: 60 * 60 * 24 * 30 }) // 30 days
 }
 
-async function saveMessage(message: Omit<ChatMessage, 'createdAt'> & { createdAt?: Date }, userId: string): Promise<ChatMessage> {
-  const fullMessage: ChatMessage = {
-    ...message,
-    createdAt: message.createdAt || new Date(),
-  }
-  
-  // Save individual message
-  await redis.set(`chat:message:${message.id}`, JSON.stringify(fullMessage), { ex: 60 * 60 * 24 * 30 }) // 30 days
-  
-  // Add to conversation message list
-  await redis.lpush(`chat:conversation:${message.chatId}:messages`, message.id)
-  
-  // Update conversation metadata
-  await updateConversationMetadata(message.chatId, message.content, message.role === 'user', userId)
-  
-  return fullMessage
+async function getMessagesFromRedis(chatId: string): Promise<MyUIMessage[]> {
+  const messages = await redis.get<MyUIMessage[]>(`chat:history:${chatId}`)
+  return messages || []
 }
 
-async function getMessages(conversationId: string, limit: number = 50, offset: number = 0): Promise<ChatMessage[]> {
-  const messageIds = await redis.lrange(`chat:conversation:${conversationId}:messages`, offset, offset + limit - 1)
-  
-  if (!messageIds.length) {
-    return []
-  }
-  
-  const messages = await Promise.all(
-    messageIds.map(async (id: string) => {
-      const messageData = await redis.get(`chat:message:${id}`)
-      return messageData ? JSON.parse(messageData as string) : null
-    })
-  )
-  
-  return messages.filter(Boolean).reverse() // Reverse to get chronological order
+async function saveChatHistoryList(userEmail: string, chatHistory: ChatHistoryItem[]): Promise<void> {
+  const historyKey = `chat:history-list:${userEmail}`
+  await redis.set(historyKey, chatHistory, { ex: 60 * 60 * 24 * 30 })
 }
 
-async function updateConversationMetadata(
-  conversationId: string, 
-  lastMessageContent: string, 
-  isUserMessage: boolean,
-  userId: string
-): Promise<void> {
-  const now = new Date().toISOString()
-  const conversationData = await redis.get(`chat:conversation:${conversationId}`)
-  const conversation = conversationData ? JSON.parse(conversationData as string) : null
-  
-  let title = conversation?.title || 'New Conversation'
-  
-  // Auto-generate title from first user message
-  if (isUserMessage && (!conversation || conversation.title === 'New Conversation')) {
-    title = lastMessageContent.slice(0, 50) + (lastMessageContent.length > 50 ? '...' : '')
-  }
-  
-  const updatedConversation = {
-    id: conversationId,
-    title,
-    userId: conversation?.userId || userId,
-    createdAt: conversation?.createdAt || now,
-    updatedAt: now,
-    lastMessageAt: now,
-    messageCount: (conversation?.messageCount || 0) + 1,
-  }
-  
-  await redis.set(`chat:conversation:${conversationId}`, JSON.stringify(updatedConversation), { ex: 60 * 60 * 24 * 30 })
+async function getChatHistoryList(userEmail: string): Promise<ChatHistoryItem[]> {
+  const historyKey = `chat:history-list:${userEmail}`
+  const chatHistory = await redis.get<ChatHistoryItem[]>(historyKey)
+  return chatHistory || []
 }
 
-async function getUserConversations(userId: string, limit: number, offset: number): Promise<ChatHistoryItem[]> {
-  // Get conversation IDs for user
-  const conversationIds = await redis.lrange(`user:${userId}:conversations`, offset, offset + limit - 1)
+async function updateChatHistoryList(userEmail: string, chatId: string, title: string): Promise<void> {
+  const existingHistory = await getChatHistoryList(userEmail)
   
-  if (!conversationIds.length) {
-    return []
+  const chatHistoryItem: ChatHistoryItem = {
+    id: chatId,
+    title: title.slice(0, 50) + (title.length > 50 ? '...' : ''),
+    lastUpdated: new Date().toISOString(),
   }
   
-  const conversations = await Promise.all(
-    conversationIds.map(async (id:string) => {
-      const conversationData = await redis.get(`chat:conversation:${id}`)
-      return conversationData ? JSON.parse(conversationData as string) : null
-    })
-  )
+  // Remove existing entry and add new one at the beginning
+  const updatedHistory = [
+    chatHistoryItem,
+    ...existingHistory.filter((item) => item.id !== chatId),
+  ]
   
-  return conversations
-    .filter(Boolean)
-    .map((conv) => ({
-      id: conv.id,
-      title: conv.title,
-      lastUpdated: conv.lastMessageAt,
-      messageCount: conv.messageCount,
-    }))
-}
-
-async function createConversation(userId: string): Promise<string> {
-  const conversationId = nanoid()
-  const now = new Date().toISOString()
-  
-  const conversation = {
-    id: conversationId,
-    title: 'New Conversation',
-    userId,
-    createdAt: now,
-    updatedAt: now,
-    lastMessageAt: now,
-    messageCount: 0,
-  }
-  
-  await Promise.all([
-    redis.set(`chat:conversation:${conversationId}`, JSON.stringify(conversation), { ex: 60 * 60 * 24 * 30 }),
-    redis.lpush(`user:${userId}:conversations`, conversationId),
-  ])
-  
-  return conversationId
-}
-
-function buildSystemPrompt(): string {
-  return `You are an AI assistant specialized in helping users create engaging Twitter/X posts. Your primary goals are:
-
-1. Help generate creative, engaging, and authentic Twitter content
-2. Provide suggestions for improving existing tweets
-3. Help brainstorm ideas based on user interests, industry, or topics
-4. Ensure content follows Twitter best practices (character limits, engagement tactics)
-5. Adapt to the user's writing style and voice
-6. Analyze and discuss website content when users share URLs
-
-Capabilities:
-- Generate tweet content up to 280 characters
-- Read and analyze website content from URLs
-- Provide feedback on existing tweets
-- Suggest improvements and optimizations
-- Help with content strategy and planning
-
-Guidelines:
-- Keep tweets under 280 characters when generating them
-- Be conversational and helpful
-- Ask clarifying questions when needed
-- Provide multiple options when appropriate
-- Consider current trends and best practices for social media engagement
-- Be concise but informative in your responses
-- When users share URLs, use the readWebsiteContent tool to analyze the content and provide insights
-- Offer to create tweets based on website content when relevant
-
-When generating tweets, format them clearly and indicate they are tweet suggestions.`
+  await saveChatHistoryList(userEmail, updatedHistory.slice(0, 20)) // Keep only last 20 chats
 }
 
 export const chatRouter = createTRPCRouter({
-  // Send a message and get AI response
-  sendMessage: protectedProcedure
-    .input(sendMessageSchema)
-    .mutation(async ({ ctx, input }) => {
+  // Get message history for a specific chat
+  get_message_history: protectedProcedure
+    .input(z.object({ chatId: z.string().nullable() }))
+    .query(async ({ ctx, input }) => {
+      const { chatId } = input
       const { user } = ctx
-      const { content, conversationId, metadata } = input
-      
-      // Check rate limits
-      const rateLimit = await checkRateLimit(user.id, false) // TODO: Add pro plan check
-      if (!rateLimit.success) {
-        throw new TRPCError({
-          code: 'TOO_MANY_REQUESTS',
-          message: `Rate limit exceeded. Please try again in ${Math.ceil((rateLimit.reset - Date.now()) / 1000)} seconds.`,
-        })
+
+      if (!chatId) {
+        return { messages: [] }
       }
-      
-      // Get or create conversation
-      let activeConversationId = conversationId
-      if (!activeConversationId) {
-        activeConversationId = await createConversation(user.id)
-      }
-      
-      // Create user message
-      const userMessageId = nanoid()
-      const userMessage: ChatMessage = {
-        id: userMessageId,
-        role: 'user',
-        content,
-        chatId: activeConversationId,
-        createdAt: new Date(),
-        metadata: metadata as MessageMetadata,
-      }
-      
-      // Save user message
-      await saveMessage(userMessage, user.id)
-      
-      // Get conversation history for context
-      const previousMessages = await getMessages(activeConversationId, 10)
-      
-      // Build messages for AI
-      const coreMessages: CoreMessage[] = [
-        {
-          role: 'system',
-          content: buildSystemPrompt(),
-        },
-        ...previousMessages.map(msg => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        })),
-      ]
-      
-      try {
-        // Check if we have any AI provider available
-        if (!openrouter && !openai) {
-          throw new TRPCError({
-            code: 'INTERNAL_SERVER_ERROR',
-            message: 'No AI provider configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY.',
-          })
-        }
-        
-        // Use OpenRouter or OpenAI based on availability
-        const aiProvider = openrouter || openai
-        const model = openrouter 
-          ? 'anthropic/claude-3.5-sonnet' 
-          : 'gpt-4o-mini'
-        
-        // Create tools
-        const readWebsiteContent = createReadWebsiteContentTool({ 
-          conversationId: activeConversationId 
-        })
-        
-        const result = await streamText({
-          model: aiProvider!(model),
-          messages: coreMessages,
-          tools: {
-            readWebsiteContent,
-          },
-          temperature: 0.7,
-        })
-        
-        // Get the response text and handle tool calls
-        const responseText = await result.text
-        const toolCalls = await result.toolCalls || []
-        
-        // Process any tool calls and append results to the response
-        let finalResponseText = responseText
-        if (toolCalls.length > 0) {
-          for (const toolCall of toolCalls) {
-            if (toolCall.toolName === 'readWebsiteContent' && toolCall.result) {
-              const websiteData = toolCall.result as { url: string; title: string; content: string }
-              finalResponseText += `\n\n[WEBSITE_CONTENT]${JSON.stringify(websiteData)}[/WEBSITE_CONTENT]`
-            }
-          }
-        }
-        
-        // Create assistant message
-        const assistantMessageId = nanoid()
-        const assistantMessage: ChatMessage = {
-          id: assistantMessageId,
-          role: 'assistant',
-          content: finalResponseText,
-          chatId: activeConversationId,
-          createdAt: new Date(),
-        }
-        
-        // Save assistant message
-        await saveMessage(assistantMessage, user.id)
-        
-        return {
-          conversationId: activeConversationId,
-          userMessage,
-          assistantMessage,
-          rateLimit,
-        }
-      } catch (error) {
-        console.error('Chat AI Error:', error)
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to generate AI response. Please try again.',
-        })
-      }
+
+      const messages = await getMessagesFromRedis(chatId)
+      return { messages }
     }),
 
-  // Get conversation history
-  getHistory: protectedProcedure
-    .input(getHistorySchema)
-    .query(async ({ ctx, input }) => {
+  // Get chat history list (recent conversations)
+  history: protectedProcedure
+    .query(async ({ ctx }) => {
       const { user } = ctx
-      const { conversationId, limit, offset } = input
       
-      // Check if user owns this conversation
-      const conversationData = await redis.get(`chat:conversation:${conversationId}`)
-      if (!conversationData) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Conversation not found',
-        })
-      }
-      const conversation = JSON.parse(conversationData as string)
-      if (conversation.userId !== user.id) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Conversation not found',
-        })
-      }
-      
-      const messages = await getMessages(conversationId, limit, offset)
+      const chatHistory = await getChatHistoryList(user.email)
       
       return {
-        messages,
-        total: conversation.messageCount,
-        hasMore: offset + limit < conversation.messageCount,
+        chatHistory: chatHistory.slice(0, 20), // Return last 20 chats
       }
     }),
 
-  // Get user's conversations
+  // Get conversations (comprehensive list)
   getConversations: protectedProcedure
-    .input(getConversationsSchema)
+    .input(z.object({
+      limit: z.number().min(1).max(50).default(20),
+      offset: z.number().min(0).default(0),
+    }))
     .query(async ({ ctx, input }) => {
       const { user } = ctx
       const { limit, offset } = input
       
-      const conversations = await getUserConversations(user.id, limit, offset)
-      const totalKey = `user:${user.id}:conversations`
-      const total = await redis.llen(totalKey)
-      
-      return {
-        conversations,
-        total,
-        hasMore: offset + limit < total,
+      try {
+        const conversations = await db
+          .select({
+            id: chatConversations.id,
+            title: chatConversations.title,
+            lastUpdated: chatConversations.lastMessageAt,
+            messageCount: chatConversations.messageCount,
+          })
+          .from(chatConversations)
+          .where(eq(chatConversations.userId, user.id))
+          .orderBy(desc(chatConversations.lastMessageAt))
+          .limit(limit)
+          .offset(offset)
+        
+        const total = await db
+          .select({ count: chatConversations.id })
+          .from(chatConversations)
+          .where(eq(chatConversations.userId, user.id))
+        
+        return {
+          conversations: conversations.map(conv => ({
+            id: conv.id,
+            title: conv.title,
+            lastUpdated: conv.lastUpdated.toISOString(),
+            messageCount: conv.messageCount,
+          })),
+          total: total.length,
+          hasMore: offset + limit < total.length,
+        }
+      } catch (error) {
+        console.error('Failed to get conversations:', error)
+        return {
+          conversations: [],
+          total: 0,
+          hasMore: false,
+        }
       }
-    }),
-
-  // Delete a conversation
-  deleteConversation: protectedProcedure
-    .input(z.object({ conversationId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { user } = ctx
-      const { conversationId } = input
-      
-      // Check if user owns this conversation
-      const conversationData = await redis.get(`chat:conversation:${conversationId}`)
-      if (!conversationData) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Conversation not found',
-        })
-      }
-      const conversation = JSON.parse(conversationData as string)
-      if (conversation.userId !== user.id) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Conversation not found',
-        })
-      }
-      
-      // Get all message IDs
-      const messageIds = await redis.lrange(`chat:conversation:${conversationId}:messages`, 0, -1)
-      
-      // Delete all messages
-      const deletePromises = messageIds.map(id => redis.del(`chat:message:${id}`))
-      
-      // Delete conversation data
-      deletePromises.push(
-        redis.del(`chat:conversation:${conversationId}`),
-        redis.del(`chat:conversation:${conversationId}:messages`),
-        redis.lrem(`user:${user.id}:conversations`, 1, conversationId)
-      )
-      
-      await Promise.all(deletePromises)
-      
-      return { success: true }
     }),
 
   // Create new conversation
@@ -445,9 +167,71 @@ export const chatRouter = createTRPCRouter({
     .mutation(async ({ ctx }) => {
       const { user } = ctx
       
-      const conversationId = await createConversation(user.id)
+      try {
+        const [conversation] = await db
+          .insert(chatConversations)
+          .values({
+            userId: user.id,
+            title: 'New Conversation',
+          })
+          .returning()
+        
+        return { conversationId: conversation.id }
+      } catch (error) {
+        console.error('Failed to create conversation:', error)
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create conversation',
+        })
+      }
+    }),
+
+  // Delete conversation
+  deleteConversation: protectedProcedure
+    .input(z.object({ conversationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { user } = ctx
+      const { conversationId } = input
       
-      return { conversationId }
+      try {
+        // Check if user owns this conversation
+        const conversation = await db
+          .select()
+          .from(chatConversations)
+          .where(and(
+            eq(chatConversations.id, conversationId),
+            eq(chatConversations.userId, user.id)
+          ))
+          .limit(1)
+        
+        if (!conversation.length) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Conversation not found',
+          })
+        }
+        
+        // Delete conversation and its messages (cascade delete)
+        await db
+          .delete(chatConversations)
+          .where(eq(chatConversations.id, conversationId))
+        
+        // Clean up Redis cache
+        await redis.del(`chat:history:${conversationId}`)
+        
+        // Update history list
+        const chatHistory = await getChatHistoryList(user.email)
+        const updatedHistory = chatHistory.filter(item => item.id !== conversationId)
+        await saveChatHistoryList(user.email, updatedHistory)
+        
+        return { success: true }
+      } catch (error) {
+        console.error('Failed to delete conversation:', error)
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to delete conversation',
+        })
+      }
     }),
 
   // Get rate limit info
@@ -455,8 +239,13 @@ export const chatRouter = createTRPCRouter({
     .query(async ({ ctx }) => {
       const { user } = ctx
       
-      const rateLimit = await checkRateLimit(user.id, false) // TODO: Add pro plan check
+      const result = await chatRateLimit.limit(user.id)
       
-      return rateLimit
+      return {
+        success: result.success,
+        limit: result.limit,
+        remaining: result.remaining,
+        reset: result.reset,
+      }
     }),
 })
