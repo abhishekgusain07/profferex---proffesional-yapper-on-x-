@@ -1,0 +1,20 @@
+
+> ShitPost@0.1.0 dev
+> next dev
+
+ ⚠ Warning: Found multiple lockfiles. Selecting /Users/abhishekgusain/package-lock.json.
+   Consider removing the lockfiles at:
+   * /Users/abhishekgusain/Documents/twitterposttool/thetwittertool/package-lock.json
+
+   ▲ Next.js 15.4.6
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.104:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 1700ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2.9s (1570 modules)
+ HEAD / 200 in 3395ms
+ ✓ Compiled in 736ms (392 modules)
+[?25h
