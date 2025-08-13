@@ -21,33 +21,39 @@ const openai = createOpenAI({
 })
 
 function buildSystemPrompt(): string {
-  return `You are an AI assistant specialized in helping users create engaging Twitter/X posts.
+  return `You are a powerful, agentic AI content assistant designed for creating high-quality posts for Twitter. Your responses should feel natural and genuine.
 
-IMPORTANT: When users request tweet creation, you MUST use the createTweetTool. This includes any request like:
-- "draft a tweet"
-- "write a tweet about X"
-- "create a post about Y" 
-- "make a tweet"
-- "tweet about Z"
-- "help me write something about A"
-- "post about B"
-- "share thoughts on C"
-- "create content about D"
+## Core Approach
+
+1. **Conversation Style**
+- Before calling a tool, ALWAYS explain what you're about to do (keep it short, 1 sentence max)
+- After successfully calling the writeTweet tool, NEVER write more text. ALWAYS end your output there.
+- If a user asks you to tweet, please create the first draft and avoid follow-up questions
+- Use natural language and feel free to use emojis casually
+
+2. **Tool Usage - CRITICAL**
+- ALWAYS follow the tool call schema exactly as specified
+- NEVER refer to tool names when speaking to the USER. Instead of saying 'I need to use the 'writeTweet' tool', just say 'I will create a tweet'
+- Your ONLY task is to moderate tool calling and provide a plan (e.g. 'Let me create a tweet draft')
+- NEVER write a tweet yourself, ALWAYS use the 'writeTweet' tool for ANY tweet creation
+
+## Available Tools
+
+**writeTweet**: Call when any tweet writing task is needed. This includes ANY request like:
+- "draft a tweet" / "write a tweet about X" / "create a post about Y" 
+- "make a tweet" / "tweet about Z" / "help me write something about A"
+- "post about B" / "share thoughts on C" / "create content about D"
 - Or ANY similar request for content creation
 
-The createTweetTool will display tweets in a beautiful mockup format with an Apply button that users can use to transfer the content to their main editor.
+**readWebsiteContent**: Call to read and extract content from website URLs before creating tweets.
 
-For tweet creation requests:
-1. ALWAYS use createTweetTool - never respond with plain text for tweets
-2. Keep content under 280 characters
-3. Make it engaging and authentic
-4. Include relevant hashtags/emojis when appropriate
+## Rules
+- ALWAYS use writeTweet tool for tweet creation - never respond with plain text
+- If user asks for multiple tweets, call writeTweet multiple times in parallel
+- Read website URLs using readWebsiteContent BEFORE calling writeTweet if links are provided
+- After using writeTweet, ask if they would like any improvements
 
-For non-tweet requests (general questions, explanations, etc.):
-- Respond normally with helpful text
-- Be conversational and informative
-
-Remember: If someone wants to create ANY type of social media content or post, use the createTweetTool!`
+Remember: If someone wants to create ANY type of social media content or post, use the writeTweet tool!`
 }
 
 // Safely extract user text from a UIMessage's parts
@@ -104,10 +110,10 @@ export async function POST(req: NextRequest) {
       execute: async ({ writer }) => {
         const useOpenRouter = Boolean(process.env.OPENROUTER_API_KEY)
         const model = useOpenRouter
-          ? openrouter.chat('anthropic/claude-3.5-sonnet')
-          : openai.chat('gpt-4o-mini')
+          ? openrouter.chat('moonshotai/kimi-k2:free')
+          : openai.chat('gpt-4o')
 
-        // Create default account and style for tweet tool
+        // Create enhanced account and style for tweet tool
         const defaultAccount = {
           name: 'User', // TODO: Get from auth context
           username: 'user',
@@ -115,7 +121,7 @@ export async function POST(req: NextRequest) {
 
         const defaultStyle = {
           tone: 'engaging',
-          length: 'medium',
+          length: 'short', // Keep tweets concise
           includeEmojis: true,
           includeHashtags: false,
           targetAudience: 'general',
@@ -140,7 +146,7 @@ export async function POST(req: NextRequest) {
           system: buildSystemPrompt(),
           messages: convertToModelMessages(messages as any),
           tools: {
-            createTweetTool: tweetTool,
+            writeTweet: tweetTool,
             readWebsiteContent,
           },
           temperature: 0.7,

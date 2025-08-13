@@ -6,6 +6,7 @@ import {
   generateId,
   streamText,
   tool,
+  UIMessage,
   UIMessageStreamWriter,
 } from 'ai'
 import { HTTPException } from 'hono/http-exception'
@@ -17,11 +18,27 @@ const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 })
 
+interface MessagePart {
+  type: string
+  text?: string
+  data?: {
+    text: string
+    status: string
+  }
+}
+
+interface MyUIMessage {
+  id: string
+  role: 'user' | 'assistant'
+  parts: MessagePart[]
+  content?: string
+}
+
 interface Context {
   writer: UIMessageStreamWriter
   ctx: {
     userContent: string
-    messages: any[]
+    messages: MyUIMessage[]
     account: {
       name: string
       username?: string
@@ -34,6 +51,23 @@ interface Context {
       targetAudience: string
     }
   }
+}
+
+function extractTextFromMessage(message: UIMessage): string {
+  const parts: unknown[] = (message as any).parts ?? []
+  const texts: string[] = []
+  for (const part of parts) {
+    if (
+      part &&
+      typeof part === 'object' &&
+      'type' in (part as any) &&
+      (part as any).type === 'text' &&
+      'text' in (part as any)
+    ) {
+      texts.push(String((part as any).text ?? ''))
+    }
+  }
+  return texts.join('\n').trim()
 }
 
 export const createTweetTool = ({ writer, ctx }: Context) => {
@@ -102,13 +136,17 @@ export const createTweetTool = ({ writer, ctx }: Context) => {
 
       ctx.messages.forEach((msg) => {
         prompt.open('response_pair')
-        if (msg.role === 'user') {
-          prompt.open('user_message')
-          prompt.tag('user_request', msg.content)
-          prompt.close('user_message')
-        } else if (msg.role === 'assistant') {
-          prompt.tag('response_tweet', msg.content)
-        }
+        msg.parts.forEach((part) => {
+          if (part.type === 'text' && msg.role === 'user' && part.text) {
+            prompt.open('user_message')
+            prompt.tag('user_request', part.text)
+            prompt.close('user_message')
+          }
+
+          if (part.type === 'data-tool-output' && part.data?.text) {
+            prompt.tag('response_tweet', part.data.text)
+          }
+        })
         prompt.close('response_pair')
       })
 
@@ -122,21 +160,21 @@ export const createTweetTool = ({ writer, ctx }: Context) => {
       }
 
       // style
-      prompt.tag('style', createStylePrompt({ account: ctx.account, style: ctx.style }))
+      prompt.tag('style', createStylePrompt({ account: ctx.account, style: ctx.style as any }))
 
       prompt.close('prompt')
 
-      const messages = [
+      const messages: UIMessage[] = [
         {
           id: generateId(),
-          role: 'user' as const,
-          content: prompt.toString(),
+          role: 'user',
+          parts: [{ type: 'text', text: prompt.toString() }],
         },
       ]
 
-      let modelToUse = 'anthropic/claude-3.5-sonnet'
+      let modelToUse = 'moonshotai/kimi-k2:free'
       if (process.env.OPENROUTER_API_KEY) {
-        modelToUse = 'anthropic/claude-3.5-sonnet'
+        modelToUse = 'moonshotai/kimi-k2:free'
       } else if (process.env.OPENAI_API_KEY) {
         modelToUse = 'gpt-4o-mini'
       }
@@ -144,7 +182,8 @@ export const createTweetTool = ({ writer, ctx }: Context) => {
       const result = streamText({
         model: openrouter.chat(modelToUse),
         system: editToolSystemPrompt({ name: ctx.account.name }),
-        messages: convertToModelMessages(messages),
+        messages: convertToModelMessages(
+          messages),
         onError(error) {
           console.log('❌❌❌ ERROR:', JSON.stringify(error, null, 2))
 

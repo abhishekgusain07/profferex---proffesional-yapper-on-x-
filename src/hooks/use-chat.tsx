@@ -77,10 +77,11 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
 
   // Memoize message transformation to prevent unnecessary recalculations
   const transformedMessages = useMemo(() => {
-    return (chat.messages as { id: string; role: string; content?: string; parts?: { type: string; text: string }[]; metadata?: MessageMetadata }[]).map((m) => ({
+    return (chat.messages as { id: string; role: string; content?: string; parts?: { type: string; text: string; data?: any }[]; metadata?: MessageMetadata }[]).map((m) => ({
       id: m.id,
       role: m.role,
       content: m.parts?.map((p) => (p.type === 'text' ? p.text : '')).join('') ?? m.content ?? '',
+      parts: m.parts || [], // Preserve original parts structure for Messages component
       metadata: m.metadata as MessageMetadata | undefined,
       chatId: chatId,
       createdAt: new Date(),

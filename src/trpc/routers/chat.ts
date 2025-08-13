@@ -109,7 +109,7 @@ async function getMessages(conversationId: string, limit: number = 50, offset: n
   }
   
   const messages = await Promise.all(
-    messageIds.map(async (id) => {
+    messageIds.map(async (id: string) => {
       const messageData = await redis.get(`chat:message:${id}`)
       return messageData ? JSON.parse(messageData as string) : null
     })
@@ -157,7 +157,7 @@ async function getUserConversations(userId: string, limit: number, offset: numbe
   }
   
   const conversations = await Promise.all(
-    conversationIds.map(async (id) => {
+    conversationIds.map(async (id:string) => {
       const conversationData = await redis.get(`chat:conversation:${id}`)
       return conversationData ? JSON.parse(conversationData as string) : null
     })

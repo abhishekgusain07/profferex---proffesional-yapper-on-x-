@@ -1,7 +1,7 @@
 'use client'
 
 import { PropsWithChildren, memo, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, Variants } from 'framer-motion'
 import { Globe, ExternalLink, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -58,7 +58,7 @@ export const WebsiteMockup = memo(
 
     return (
       <motion.div
-        variants={isLoading ? containerVariants : undefined}
+        variants={isLoading ? (containerVariants as Variants) : undefined}
         initial={isLoading ? 'hidden' : false}
         animate={isLoading ? 'visible' : false}
         className="w-full min-w-80 rounded-2xl border border-gray-200 bg-white shadow-lg overflow-hidden"

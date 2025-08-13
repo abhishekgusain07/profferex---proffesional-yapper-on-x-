@@ -37,6 +37,7 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  parts?: MessagePart[] // Add parts for AI SDK compatibility
   metadata?: MessageMetadata
   chatId: string
   createdAt: Date

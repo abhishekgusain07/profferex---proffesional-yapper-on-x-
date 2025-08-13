@@ -390,7 +390,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
           <SidebarGroup className="h-full py-0 px-0">
             <div className="h-full space-y-6">
-              <Messages status={status} messages={messages} />
+              <Messages className="flex-1" />
             </div>
           </SidebarGroup>
         </SidebarContent>
