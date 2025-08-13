@@ -12,7 +12,6 @@ import {
   AlertCircle
 } from 'lucide-react'
 import type { Attachment } from '@/types/chat'
-import type { LocalAttachment } from '@/hooks/use-attachments'
 import { useAttachments } from '@/hooks/use-attachments'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -20,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 
 interface AttachmentItemProps {
-  attachment: Attachment | LocalAttachment
+  attachment: Attachment
   index: number
 }
 

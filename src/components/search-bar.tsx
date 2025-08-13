@@ -191,9 +191,10 @@ export function SearchBar({
                               handleFilterChange('dateFrom', date)
                               setDateFromOpen(false)
                             }}
-                            disabled={(date) =>
-                              date > new Date() || (filters.dateTo && date > filters.dateTo)
-                            }
+                            disabled={(date) => {
+                              const today = new Date()
+                              return date > today || (filters.dateTo ? date > filters.dateTo : false)
+                            }}
                             initialFocus
                           />
                         </PopoverContent>
@@ -220,9 +221,10 @@ export function SearchBar({
                               handleFilterChange('dateTo', date)
                               setDateToOpen(false)
                             }}
-                            disabled={(date) =>
-                              date > new Date() || (filters.dateFrom && date < filters.dateFrom)
-                            }
+                            disabled={(date) => {
+                              const today = new Date()
+                              return date > today || (filters.dateFrom ? date < filters.dateFrom : false)
+                            }}
                             initialFocus
                           />
                         </PopoverContent>

@@ -209,18 +209,13 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   )
 
   const { 
-    conversationId,
-    id,
     messages, 
-    sendMessage, 
-    startNewConversation, 
-    loadConversation,
-    setId,
     status,
-    stopGeneration,
-    isLoading,
-    isStreaming,
-    error
+    sendMessage, 
+    startNewChat,
+    id,
+    setId,
+    stop
   } = useChatContext()
   
   const { attachments, removeAttachment, addChatAttachment } = useAttachments()
@@ -241,7 +236,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
       if (!text.trim()) return
 
       if (!Boolean(searchParams.get('chatId'))) {
-        updateURL('chatId', id || conversationId || '')
+        updateURL('chatId', id)
       }
 
       // Properly narrow to Attachment[] (exclude uploading chat files)
@@ -253,7 +248,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         return []
       })
 
-      await sendMessage(text, { attachments: normalized })
+      sendMessage({ text, metadata: { attachments: normalized, userMessage: text } })
 
       if (attachments.length > 0) {
         requestAnimationFrame(() => {
@@ -263,12 +258,12 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         })
       }
     },
-    [searchParams, updateURL, conversationId, sendMessage, attachments, removeAttachment],
+    [searchParams, updateURL, id, sendMessage, attachments, removeAttachment],
   )
 
   const handleNewChat = useCallback(() => {
-    startNewConversation()
-  }, [startNewConversation])
+    startNewChat()
+  }, [startNewChat])
 
   const handleFilesAdded = useCallback(
     (files: File[]) => {
@@ -279,16 +274,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   const handleChatSelect = async (chatId: string) => {
     setIsHistoryOpen(false)
-    
-    // Update URL explicitly
-    updateURL('chatId', chatId)
-    
-    // Try both methods for compatibility
-    try {
-      await loadConversation(chatId)
-    } catch (e) {
-      await setId(chatId)
-    }
+    setId(chatId)
   }
 
   return (
@@ -395,13 +381,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
           <SidebarGroup className="h-full py-0 px-0">
             <div className="h-full space-y-6">
-              <Messages 
-                messages={messages}
-                isLoading={isLoading}
-                isStreaming={isStreaming}
-                error={error}
-                className="flex-1" 
-              />
+              <Messages status={status} messages={messages} />
             </div>
           </SidebarGroup>
         </SidebarContent>
@@ -409,10 +389,10 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         <SidebarFooter className="relative p-3 border-t border-t-gray-300 bg-gray-100">
           <FileUpload onFilesAdded={handleFilesAdded}>
             <ChatInput
-              onStop={stopGeneration}
+              onStop={stop}
               onSubmit={handleSubmit}
               handleFilesAdded={handleFilesAdded}
-              disabled={status === 'loading'}
+              disabled={status === 'submitted' || status === 'streaming'}
             />
           </FileUpload>
         </SidebarFooter>

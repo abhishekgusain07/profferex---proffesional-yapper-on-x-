@@ -29,11 +29,12 @@ interface ChatSidebarProps {
 export function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const [showHistory, setShowHistory] = useState(false)
   const { 
-    conversationId, 
+    id: conversationId, 
     messages, 
-    startNewConversation, 
-    loadConversation, 
-    clearChat 
+    startNewChat, 
+    setId,
+    status,
+    error 
   } = useChatContext()
   
   const { 
@@ -43,14 +44,14 @@ export function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   } = useChatConversations()
 
   const handleNewChat = useCallback(async () => {
-    await startNewConversation()
+    await startNewChat()
     setShowHistory(false)
-  }, [startNewConversation])
+  }, [startNewChat])
 
-  const handleLoadConversation = useCallback(async (id: string) => {
-    await loadConversation(id)
+  const handleLoadConversation = useCallback(async (chatId: string) => {
+    await setId(chatId)
     setShowHistory(false)
-  }, [loadConversation])
+  }, [setId])
 
   const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -80,13 +81,13 @@ export function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const handleSuggestionClick = useCallback(async (prompt: string) => {
     // If no conversation exists, create one first
     if (!conversationId) {
-      await startNewConversation()
+      await startNewChat()
     }
     
     // Send the prompt message
     // This will be handled by the ChatInput component
     // For now, we'll just create a new conversation
-  }, [conversationId, startNewConversation])
+  }, [conversationId, startNewChat])
 
   return (
     <>
@@ -215,7 +216,7 @@ export function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                 </div>
               ) : (
                 <div className="flex-1 overflow-hidden">
-                  <Messages className="h-full" />
+                  <Messages messages={messages} status={status || 'idle'} error={error} />
                 </div>
               )}
             </div>

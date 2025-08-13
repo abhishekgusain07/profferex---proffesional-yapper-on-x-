@@ -72,9 +72,12 @@ export function ChatInput({
     }
 
     try {
-      await sendMessage(messageContent, {
-        attachments: messageAttachments,
-        timestamp: Date.now(),
+      sendMessage({
+        text: messageContent,
+        metadata: {
+          attachments: messageAttachments,
+          userMessage: messageContent
+        }
       })
     } catch (error) {
       // Error is handled by the chat context

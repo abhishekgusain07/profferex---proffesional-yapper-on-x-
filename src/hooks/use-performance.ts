@@ -14,7 +14,7 @@ export function usePerformanceMonitor(componentName: string, deps: any[] = []) {
     lastUpdate: new Date()
   })
   
-  const renderStartTime = useRef<number>()
+  const renderStartTime = useRef<number>(0)
   const renderCount = useRef(0)
 
   useEffect(() => {

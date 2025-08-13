@@ -20,7 +20,8 @@ interface MessageWrapperProps {
 }
 
 export function MessageWrapper({ message, isLast }: MessageWrapperProps) {
-  const { regenerateResponse, deleteMessage } = useChatContext()
+  const { regenerateResponse, 
+    deleteMessage } = useChatContext()
   const [showActions, setShowActions] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
 
@@ -29,10 +30,10 @@ export function MessageWrapper({ message, isLast }: MessageWrapperProps) {
 
   // Parse website content from message
   const parseWebsiteContent = (content: string) => {
-    const websiteMatches = content.match(/\[WEBSITE_CONTENT\](.*?)\[\/WEBSITE_CONTENT\]/gs)
+    const websiteMatches = content.match(/\[WEBSITE_CONTENT\]([\s\S]*?)\[\/WEBSITE_CONTENT\]/)
     if (!websiteMatches) return { content, websiteContent: null }
     
-    const cleanContent = content.replace(/\[WEBSITE_CONTENT\].*?\[\/WEBSITE_CONTENT\]/gs, '').trim()
+    const cleanContent = content.replace(/\[WEBSITE_CONTENT\][\s\S]*?\[\/WEBSITE_CONTENT\]/, '').trim()
     
     try {
       const websiteData = JSON.parse(websiteMatches[0].replace(/\[WEBSITE_CONTENT\]|\[\/WEBSITE_CONTENT\]/g, ''))
@@ -137,8 +138,7 @@ export function MessageWrapper({ message, isLast }: MessageWrapperProps) {
               >
                 <div className="line-clamp-3">
                   <ReactMarkdown>
-                    {websiteContent.content.slice(0, 250)}
-                    {websiteContent.content.length > 250 && '...'}
+                    {websiteContent.content.slice(0, 250) + (websiteContent.content.length > 250 ? '...' : '')}
                   </ReactMarkdown>
                 </div>
               </WebsiteMockup>
