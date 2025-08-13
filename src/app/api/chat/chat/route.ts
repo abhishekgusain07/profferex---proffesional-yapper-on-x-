@@ -11,6 +11,7 @@ import {
 import { redis } from '@/lib/redis'
 import { createTweetTool } from '@/trpc/routers/chat/tools/create-tweet-tool'
 import { createReadWebsiteContentTool } from '@/lib/read-website-content'
+import { auth } from '@/lib/auth'
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -76,6 +77,18 @@ function extractTextFromMessage(message: UIMessage): string {
 
 export async function POST(req: NextRequest) {
   try {
+    // Get authenticated user
+    const session = await auth.api.getSession({
+      headers: req.headers,
+    })
+
+    if (!session) {
+      return new Response(JSON.stringify({ message: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
     const body = await req.json()
     const { message, id } = body as { message: any; id: string }
 
@@ -110,14 +123,14 @@ export async function POST(req: NextRequest) {
         
         // Update chat history list
         try {
-          const historyKey = `chat:history-list:user@example.com` // TODO: Get from auth context
-          const existingHistory = (await redis.get(historyKey)) as Array<{id: string, title: string, lastUpdated: string}> || []
+          const historyListKey = `chat:history-list:${session.user.email}`
+          const existingHistory = (await redis.get(historyListKey)) as Array<{id: string, title: string, lastUpdated: string}> || []
           
           // Get title from first user message
           const firstUserMessage = messages.find((m: any) => m.role === 'user')
           const metadata = firstUserMessage?.metadata || {}
           const userMessage = (metadata as any)?.userMessage
-          const textFromParts = firstUserMessage?.parts?.find((p: any) => p.type === 'text')?.text
+          const textFromParts = firstUserMessage ? extractTextFromMessage(firstUserMessage as UIMessage) : ''
           const title = (userMessage || textFromParts || 'New Conversation').slice(0, 50)
           
           const chatHistoryItem = {
@@ -132,7 +145,7 @@ export async function POST(req: NextRequest) {
             ...existingHistory.filter((item) => item.id !== id),
           ]
           
-          await redis.set(historyKey, updatedHistory.slice(0, 20)) // Keep only last 20 chats
+          await redis.set(historyListKey, updatedHistory.slice(0, 20)) // Keep only last 20 chats
         } catch (error) {
           console.error('Failed to update chat history list:', error)
         }
@@ -145,8 +158,8 @@ export async function POST(req: NextRequest) {
 
         // Create enhanced account and style for tweet tool
         const defaultAccount = {
-          name: 'User', // TODO: Get from auth context
-          username: 'user',
+          name: session.user.name || 'User',
+          username: session.user.name?.toLowerCase().replace(/\s+/g, '') || 'user',
         }
 
         const defaultStyle = {
