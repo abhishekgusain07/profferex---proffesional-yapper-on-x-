@@ -7,19 +7,18 @@ import { Button } from '@/components/ui/button'
 import DuolingoButton from '@/components/ui/duolingo-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Loader2, X, Upload, Calendar as CalendarIcon, Clock, Trash2, ChevronDown } from 'lucide-react'
+import { Loader2, X, Upload, Clock, Trash2, ChevronDown } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format } from 'date-fns'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import TweetEditor from '@/components/tweet-editor/tweet-editor'
 import { useTweets } from '@/hooks/use-tweets'
 import Confetti, { type ConfettiRef } from '@/components/confetti'
+import { Calendar20 } from '@/components/tweet-editor/date-picker'
 
 const MAX_TWEET_LEN = 280
 
@@ -46,8 +45,6 @@ const Studio = () => {
   const { currentTweet, charCount, setTweetContent, setCharCount } = useTweets()
   const [lastTweetId, setLastTweetId] = useState<string | null>(null)
   const [media, setMedia] = useState<LocalMedia[]>([])
-  const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined)
-  const [scheduledTime, setScheduledTime] = useState('09:00')
   const confettiRef = useRef<ConfettiRef>(null)
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
@@ -109,8 +106,6 @@ const Studio = () => {
     onSuccess: () => {
       form.reset({ text: '' })
       setMedia([])
-      setScheduledDate(undefined)
-      setScheduledTime('09:00')
       refetchScheduled()
     },
   })
@@ -130,27 +125,19 @@ const Studio = () => {
   const overLimit = remaining < 0
 
 
-  // Combine date and time into Unix timestamp
-  const getScheduledUnix = () => {
-    if (!scheduledDate || !scheduledTime) return null
-    const [hours, minutes] = scheduledTime.split(':').map(Number)
-    const combined = new Date(scheduledDate)
-    combined.setHours(hours, minutes, 0, 0)
-    return Math.floor(combined.getTime() / 1000)
-  }
 
   // Handle form submission (post immediately)
   const handleSubmit = () => {
     postNow.mutate({ text: currentTweet.content.trim(), mediaIds })
   }
 
-  // Handle scheduling tweets
-  const handleSchedule = () => {
-    const scheduledUnix = getScheduledUnix()
-    if (!scheduledUnix) {
-      alert('Please select a valid date and time')
-      return
-    }
+  // Handle scheduling tweets (used by Calendar20 component)
+  const handleScheduleTweet = (date: Date, time: string) => {
+    const [hours, minutes] = time.split(':').map(Number)
+    const scheduledDateTime = new Date(date)
+    scheduledDateTime.setHours(hours || 0, minutes || 0, 0, 0)
+    
+    const scheduledUnix = Math.floor(scheduledDateTime.getTime() / 1000)
     
     // Validate that scheduled time is at least 1 minute in the future
     const now = Date.now()
@@ -677,53 +664,11 @@ const Studio = () => {
                             <ChevronDown className="w-4 h-4" />
                           </DuolingoButton>
                         </PopoverTrigger>
-                        <PopoverContent className="w-80">
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label>Date</Label>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    className="w-full justify-start text-left font-normal"
-                                  >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {scheduledDate ? format(scheduledDate, 'PPP') : <span>Pick a date</span>}
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-full p-4">
-                                  <Calendar
-                                    mode="single"
-                                    className='min-w-full'
-                                    selected={scheduledDate}
-                                    onSelect={setScheduledDate}
-                                    disabled={(date) => date < new Date()}
-                                    initialFocus
-                                  />
-                                </PopoverContent>
-                              </Popover>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="time">Time</Label>
-                              <Input
-                                id="time"
-                                type="time"
-                                value={scheduledTime}
-                                onChange={(e) => setScheduledTime(e.target.value)}
-                              />
-                            </div>
-                            <DuolingoButton
-                              onClick={handleSchedule}
-                              disabled={scheduleTweet.isPending || !scheduledDate || !scheduledTime || 
-                                      !currentTweet.content.trim() || hasUploading}
-                              variant="primary"
-                              size="md"
-                              className="w-full"
-                              loading={scheduleTweet.isPending}
-                            >
-                              {scheduleTweet.isPending ? 'Scheduling...' : 'Schedule Tweet'}
-                            </DuolingoButton>
-                          </div>
+                        <PopoverContent className="max-w-3xl w-full">
+                          <Calendar20
+                            onSchedule={handleScheduleTweet}
+                            isPending={scheduleTweet.isPending}
+                          />
                         </PopoverContent>
                       </Popover>
                     </div>

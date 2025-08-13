@@ -57,14 +57,9 @@ const Page = () => {
                               Go to Studio →
                             </DuolingoButton>
                           </Link>
-                          <DuolingoButton 
-                            className="w-full h-12 sm:px-8 bg-gray-500 hover:bg-gray-600" 
-                            onClick={() => signOut()}
-                          >
-                            Logout
-                          </DuolingoButton>
                         </div>
                       ) : (
+                        
                         <Link href="/sign-up">
                           <DuolingoButton className="w-full h-12 sm:px-8">
                             Start Posting More →
