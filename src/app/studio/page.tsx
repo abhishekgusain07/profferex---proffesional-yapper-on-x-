@@ -19,6 +19,7 @@ import { format } from 'date-fns'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import TweetEditor from '@/components/tweet-editor/tweet-editor'
 import { useTweets } from '@/hooks/use-tweets'
+import Confetti, { type ConfettiRef } from '@/components/confetti'
 
 const MAX_TWEET_LEN = 280
 
@@ -47,6 +48,7 @@ const Studio = () => {
   const [media, setMedia] = useState<LocalMedia[]>([])
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined)
   const [scheduledTime, setScheduledTime] = useState('09:00')
+  const confettiRef = useRef<ConfettiRef>(null)
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
   const form = useForm<TweetFormValues>({
@@ -90,6 +92,16 @@ const Studio = () => {
       form.reset({ text: '' })
       setMedia([])
       refetchAccounts()
+      
+      // Fire confetti animation
+      setTimeout(() => {
+        confettiRef.current?.fire({
+          particleCount: 150,
+          spread: 100,
+          origin: { y: 0.6 },
+          colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+        })
+      }, 200)
     },
   })
 
@@ -743,6 +755,9 @@ const Studio = () => {
           </span>
         </div>
       )}
+      
+      {/* Confetti Component */}
+      <Confetti ref={confettiRef} />
       </div>
     </div>
   )
