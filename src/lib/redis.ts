@@ -5,6 +5,7 @@ import { Redis } from "@upstash/redis"
 class InMemoryRedis {
   private kvStore: Map<string, string> = new Map()
   private listStore: Map<string, string[]> = new Map()
+  private jsonStore: Map<string, any> = new Map()
 
   async get(key: string): Promise<string | null> {
     return this.kvStore.has(key) ? (this.kvStore.get(key) as string) : null
@@ -13,6 +14,97 @@ class InMemoryRedis {
   async set(key: string, value: string, _opts?: { ex?: number }): Promise<"OK"> {
     this.kvStore.set(key, value)
     return "OK"
+  }
+
+  async exists(key: string): Promise<number> {
+    return this.jsonStore.has(key) || this.kvStore.has(key) || this.listStore.has(key) ? 1 : 0
+  }
+
+  // JSON operations for style data
+  json = {
+    get: async <T = any>(key: string, path?: string): Promise<T | null> => {
+      const data = this.jsonStore.get(key)
+      if (!data) return null
+      
+      if (!path || path === '$') {
+        return data as T
+      }
+      
+      // Simple path resolution for nested properties
+      const pathParts = path.replace(/^\$\./, '').split('.')
+      let result = data
+      for (const part of pathParts) {
+        if (result && typeof result === 'object' && part in result) {
+          result = result[part]
+        } else {
+          return null
+        }
+      }
+      return result as T
+    },
+
+    set: async (key: string, path: string, value: any): Promise<"OK"> => {
+      if (!path || path === '$') {
+        this.jsonStore.set(key, value)
+        return "OK"
+      }
+
+      let data = this.jsonStore.get(key) || {}
+      
+      if (path.startsWith('$.')) {
+        const pathParts = path.substring(2).split('.')
+        let current = data
+        
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const part = pathParts[i]
+          if (!current[part] || typeof current[part] !== 'object') {
+            current[part] = {}
+          }
+          current = current[part]
+        }
+        
+        const finalKey = pathParts[pathParts.length - 1]
+        current[finalKey] = value
+      } else {
+        data = value
+      }
+      
+      this.jsonStore.set(key, data)
+      return "OK"
+    },
+
+    merge: async (key: string, path: string, value: any): Promise<"OK"> => {
+      const existing = await this.json.get(key, path) || {}
+      const merged = { ...existing, ...value }
+      return await this.json.set(key, path, merged)
+    },
+
+    del: async (key: string, path?: string): Promise<number> => {
+      if (!path || path === '$') {
+        return this.jsonStore.delete(key) ? 1 : 0
+      }
+      
+      const data = this.jsonStore.get(key)
+      if (!data) return 0
+      
+      const pathParts = path.replace(/^\$\./, '').split('.')
+      let current = data
+      
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const part = pathParts[i]
+        if (!current[part]) return 0
+        current = current[part]
+      }
+      
+      const finalKey = pathParts[pathParts.length - 1]
+      if (finalKey in current) {
+        delete current[finalKey]
+        this.jsonStore.set(key, data)
+        return 1
+      }
+      
+      return 0
+    }
   }
 
   async lpush(key: string, value: string): Promise<number> {
@@ -39,6 +131,7 @@ class InMemoryRedis {
     for (const key of keys) {
       if (this.kvStore.delete(key)) deleted++
       if (this.listStore.delete(key)) deleted++
+      if (this.jsonStore.delete(key)) deleted++
     }
     return deleted
   }
