@@ -7,6 +7,7 @@ import { AppSidebarInset } from '@/components/providers/app-sidebar-inset'
 import { DashboardProviders } from '@/components/providers/dashboard-providers'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
+import { useChatContext } from '@/hooks/use-chat'
 
 interface LayoutProps extends PropsWithChildren {
   hideAppSidebar?: boolean

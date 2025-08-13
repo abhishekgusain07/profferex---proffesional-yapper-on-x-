@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, PropsWithChildren, useMemo, useEffect, useCallback } from 'react'
+import { createContext, useContext, PropsWithChildren, useMemo, useEffect, useCallback, useState } from 'react'
 import { DefaultChatTransport } from 'ai'
 import { useChat } from '@ai-sdk/react'
 import { nanoid } from 'nanoid'
@@ -20,6 +20,10 @@ interface ChatContext extends ReturnType<typeof useChat> {
   isStreaming: boolean
   regenerateResponse: (messageId: string) => Promise<void>
   deleteMessage: (messageId: string) => Promise<void>
+  // Chat sidebar state
+  chatSidebarOpen: boolean
+  setChatSidebarOpen: (open: boolean) => void
+  toggleChatSidebar: () => void
 }
 
 const ChatContext = createContext<ChatContext | null>(null)
@@ -31,9 +35,16 @@ export function ChatProvider({ children }: PropsWithChildren) {
     defaultValue,
   })
 
+  // Chat sidebar state management
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(false)
+
   const startNewChat = async (newId?: string) => {
     setId(newId || nanoid())
   }
+
+  const toggleChatSidebar = useCallback(() => {
+    setChatSidebarOpen(prev => !prev)
+  }, [])
 
   const chat = useChat({
     id,
@@ -72,7 +83,11 @@ export function ChatProvider({ children }: PropsWithChildren) {
     isStreaming: chat.status === 'streaming',
     regenerateResponse: async (messageId: string) => {},
     deleteMessage: async (messageId: string) => {},
-  }), [chat, startNewChat, setId, id])
+    // Chat sidebar state
+    chatSidebarOpen,
+    setChatSidebarOpen,
+    toggleChatSidebar,
+  }), [chat, startNewChat, setId, id, chatSidebarOpen, setChatSidebarOpen, toggleChatSidebar])
 
   return (
     <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
