@@ -34,6 +34,9 @@ import {
 } from './ui/dialog'
 import { Input } from './ui/input'
 import type { Attachment, ChatAttachment } from '@/types/chat'
+import { SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import * as SheetPrimitive from '@radix-ui/react-dialog'
 
 const ChatInput = ({
   onSubmit,
