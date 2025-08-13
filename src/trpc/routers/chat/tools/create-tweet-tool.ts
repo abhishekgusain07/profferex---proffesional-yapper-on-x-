@@ -27,9 +27,9 @@ interface MessagePart {
   }
 }
 
-interface MyUIMessage {
+export interface MyUIMessage {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   parts: MessagePart[]
   content?: string
 }

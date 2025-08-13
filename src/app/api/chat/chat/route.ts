@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
           writer,
           ctx: {
             userContent: extractTextFromMessage(normalizedMessage),
-            messages,
+            messages: messages as any,
             account: defaultAccount,
             style: defaultStyle,
           },

@@ -6,7 +6,7 @@ import { ChevronsLeft, Copy, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { StreamingMessage } from './streaming-message'
-import { useSession } from '@/lib/auth-client'
+import { AccountAvatar, AccountName, AccountHandle } from '@/hooks/use-account'
 import { useTweets } from '@/hooks/use-tweets'
 import { $createParagraphNode, $createTextNode, $getRoot } from 'lexical'
 import toast from 'react-hot-toast'
@@ -20,7 +20,6 @@ interface TweetMockupProps {
 
 export const TweetMockup = memo(
   ({ text, content, isLoading = false, children }: TweetMockupProps) => {
-    const { data: session } = useSession()
     const { shadowEditor } = useTweets()
     const displayText = text || content || ''
 
@@ -78,18 +77,10 @@ export const TweetMockup = memo(
       >
         <div className="flex items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            <div className="size-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-semibold text-sm">
-                {session?.user?.name?.[0] || session?.user?.email?.[0] || 'U'}
-              </span>
-            </div>
+            <AccountAvatar className="size-8" />
             <div className="flex flex-col">
-              <span className="leading-[1.2] text-sm font-medium text-gray-900">
-                {session?.user?.name || 'Your Name'}
-              </span>
-              <span className="text-sm leading-[1.2] text-gray-500">
-                @{session?.user?.name?.toLowerCase().replace(/\s+/g, '') || 'username'}
-              </span>
+              <AccountName animate className="leading-[1.2] text-sm" />
+              <AccountHandle className="text-sm leading-[1.2]" />
             </div>
           </div>
 

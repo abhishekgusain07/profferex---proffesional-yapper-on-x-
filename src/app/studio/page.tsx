@@ -679,9 +679,10 @@ const Studio = () => {
                                     {scheduledDate ? format(scheduledDate, 'PPP') : <span>Pick a date</span>}
                                   </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
+                                <PopoverContent className="w-full p-4">
                                   <Calendar
                                     mode="single"
+                                    className='min-w-full'
                                     selected={scheduledDate}
                                     onSelect={setScheduledDate}
                                     disabled={(date) => date < new Date()}
