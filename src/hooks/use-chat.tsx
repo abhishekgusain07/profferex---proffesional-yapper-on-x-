@@ -1,10 +1,9 @@
 'use client'
 
-import { createContext, useContext, PropsWithChildren, useMemo, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, PropsWithChildren, useMemo, useEffect, useCallback } from 'react'
 import { DefaultChatTransport } from 'ai'
 import { useChat } from '@ai-sdk/react'
 import { nanoid } from 'nanoid'
-import { useQuery } from '@tanstack/react-query'
 import { useQueryState } from 'nuqs'
 import { trpc } from '@/trpc/client'
 import toast from 'react-hot-toast'
@@ -13,21 +12,6 @@ import type { ChatMessage, ChatContextType, MessageMetadata } from '@/types/chat
 
 const ChatContext = createContext<ChatContextType | null>(null)
 
-// Stable reference for empty messages array
-const EMPTY_MESSAGES = { messages: [] }
-
-// Message comparison function to prevent unnecessary updates
-function areMessagesEqual(a: unknown[], b: unknown[]): boolean {
-  if (a.length !== b.length) return false
-  return a.every((msg, index) => {
-    const otherMsg = b[index]
-    const msgTyped = msg as { id: string; content: string; role: string }
-    const otherMsgTyped = otherMsg as { id: string; content: string; role: string }
-    return msgTyped.id === otherMsgTyped.id && 
-           msgTyped.content === otherMsgTyped.content && 
-           msgTyped.role === otherMsgTyped.role
-  })
-}
 
 interface ChatProviderProps extends PropsWithChildren {
   initialConversationId?: string
@@ -58,30 +42,18 @@ export function ChatProvider({ children }: ChatProviderProps) {
     },
   })
 
-  const { data } = useQuery({
-    queryKey: ['initial-messages', id],
-    queryFn: async () => {
-      try {
-        const res = await fetch(`/api/chat/get_message_history?chatId=${id}`)
-        if (!res.ok) return EMPTY_MESSAGES
-        return (await res.json()) as { messages: unknown[] }
-      } catch (error) {
-        console.error('Failed to fetch chat history:', error)
-        return EMPTY_MESSAGES
-      }
-    },
-    initialData: EMPTY_MESSAGES,
-  })
-
-  // Track previous messages to prevent unnecessary updates
-  const prevMessagesRef = useRef<unknown[]>([])
+  const { data } = trpc.chat.get_message_history.useQuery(
+    { chatId: id },
+    {
+      initialData: { messages: [] },
+    }
+  )
 
   useEffect(() => {
-    if (data?.messages && !areMessagesEqual(prevMessagesRef.current, data.messages)) {
-      prevMessagesRef.current = data.messages
+    if (data?.messages) {
       chat.setMessages(data.messages as never[])
     }
-  }, [data?.messages, chat])
+  }, [data])
 
   // Memoize message transformation to prevent unnecessary recalculations
   const transformedMessages = useMemo(() => {
@@ -103,7 +75,6 @@ export function ChatProvider({ children }: ChatProviderProps) {
 
   const clearChat = useCallback(() => {
     chat.setMessages([] as never[])
-    prevMessagesRef.current = []
   }, [chat])
 
   const stop = useCallback(() => {

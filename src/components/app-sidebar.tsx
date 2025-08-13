@@ -2,6 +2,7 @@
 
 import { ArrowUp, History, Paperclip, Plus, Square, X } from 'lucide-react'
 import { useCallback, useContext, useEffect, useState } from 'react'
+import { trpc } from '@/trpc/client'
 
 import {
   Sidebar,
@@ -13,7 +14,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { useAttachments } from '@/hooks/use-attachments'
-import { useChatContext, useChatConversations } from '@/hooks/use-chat'
+import { useChatContext } from '@/hooks/use-chat'
 import { motion } from 'framer-motion'
 import { formatDistanceToNow } from 'date-fns'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -198,17 +199,19 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 
-  const { 
-    conversations: chatConversations, 
-    isLoading: isHistoryPending 
-  } = useChatConversations()
+  const { data: chatConversations, isPending: isHistoryPending } = trpc.chat.history.useQuery(
+    undefined,
+    {
+      enabled: isHistoryOpen,
+    }
+  )
 
   const { 
-    conversationId, 
+    id: conversationId, 
     messages, 
     sendMessage, 
     startNewConversation, 
-    loadConversation, 
+    setId, 
     status,
     stopGeneration 
   } = useChatContext()
@@ -231,7 +234,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
       if (!text.trim()) return
 
       if (!Boolean(searchParams.get('chatId'))) {
-        updateURL('chatId', conversationId || '')
+        updateURL('chatId', conversationId)
       }
 
       // Properly narrow to Attachment[] (exclude uploading chat files)
@@ -269,7 +272,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   const handleChatSelect = async (chatId: string) => {
     setIsHistoryOpen(false)
-    await loadConversation(chatId)
+    setId(chatId)
   }
 
   return (
@@ -406,8 +409,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
             <DialogDescription className="leading-none">
               {isHistoryPending
                 ? 'Loading...'
-                : chatConversations?.length
-                  ? `Showing ${chatConversations?.length} most recent chats`
+                : chatConversations?.chatHistory?.length
+                  ? `Showing ${chatConversations?.chatHistory?.length} most recent chats`
                   : 'No chat history yet'}
             </DialogDescription>
           </DialogHeader>
@@ -415,8 +418,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           {
             <div className="overflow-y-auto max-h-[60vh] -mx-2 px-2">
               <div className="space-y-2">
-                {chatConversations?.length ? (
-                  chatConversations.map((chat) => (
+                {chatConversations?.chatHistory?.length ? (
+                  chatConversations.chatHistory.map((chat) => (
                     <button
                       key={chat.id}
                       onClick={() => handleChatSelect(chat.id)}
