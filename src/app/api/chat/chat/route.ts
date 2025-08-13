@@ -111,12 +111,14 @@ export async function POST(req: NextRequest) {
         // Update chat history list
         try {
           const historyKey = `chat:history-list:user@example.com` // TODO: Get from auth context
-          const existingHistory = (await redis.get<Array<{id: string, title: string, lastUpdated: string}>>(historyKey)) || []
+          const existingHistory = (await redis.get(historyKey)) as Array<{id: string, title: string, lastUpdated: string}> || []
           
           // Get title from first user message
           const firstUserMessage = messages.find((m: any) => m.role === 'user')
-          const title = firstUserMessage?.metadata?.userMessage || 
-                      (firstUserMessage?.parts?.[0]?.text || 'New Conversation').slice(0, 50)
+          const metadata = firstUserMessage?.metadata || {}
+          const userMessage = (metadata as any)?.userMessage
+          const textFromParts = firstUserMessage?.parts?.find((p: any) => p.type === 'text')?.text
+          const title = (userMessage || textFromParts || 'New Conversation').slice(0, 50)
           
           const chatHistoryItem = {
             id,
