@@ -10,7 +10,7 @@ export interface BaseAttachment {
 }
 
 export interface ChatAttachment extends BaseAttachment {
-  fileKey: string
+  fileKey?: string // Optional during upload
   variant: 'chat'
   uploadProgress?: number
   isUploading?: boolean

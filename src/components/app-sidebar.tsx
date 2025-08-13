@@ -32,6 +32,8 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { Input } from './ui/input'
+import type { Attachment } from '@/types/chat'
+import type { LocalAttachment } from '@/hooks/use-attachments'
 
 const ChatInput = ({
   onSubmit,
@@ -107,7 +109,7 @@ const ChatInput = ({
               transition={{ duration: 0.2, delay: i * 0.1 }}
             >
               <AttachmentItem
-                attachment={attachment}
+                attachment={attachment as Attachment | LocalAttachment}
                 index={i}
               />
             </motion.div>
@@ -232,7 +234,16 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         updateURL('chatId', conversationId || '')
       }
 
-      await sendMessage(text, { attachments })
+      // Properly narrow to Attachment[] (exclude uploading chat files)
+      const normalized: Attachment[] = attachments.flatMap((a) => {
+        if (a.variant === 'knowledge') return [a as Attachment]
+        if (a.variant === 'chat' && 'fileKey' in (a as any) && (a as any).fileKey && !(a as any).isUploading) {
+          return [a as Attachment]
+        }
+        return []
+      })
+
+      await sendMessage(text, { attachments: normalized })
 
       if (attachments.length > 0) {
         requestAnimationFrame(() => {

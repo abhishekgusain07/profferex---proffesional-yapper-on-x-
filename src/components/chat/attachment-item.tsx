@@ -12,6 +12,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import type { Attachment } from '@/types/chat'
+import type { LocalAttachment } from '@/hooks/use-attachments'
 import { useAttachments } from '@/hooks/use-attachments'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -19,7 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 
 interface AttachmentItemProps {
-  attachment: Attachment
+  attachment: Attachment | LocalAttachment
   index: number
 }
 
@@ -102,9 +103,9 @@ export function AttachmentItem({ attachment, index }: AttachmentItemProps) {
   const Icon = getAttachmentIcon(attachment.type)
   const colors = getColorScheme(attachment.type)
 
-  const isUploading = attachment.variant === 'chat' && attachment.isUploading
-  const hasError = attachment.variant === 'chat' && attachment.error
-  const progress = attachment.variant === 'chat' ? attachment.uploadProgress || 0 : 100
+  const isUploading = (attachment as any).variant === 'chat' && (attachment as any).isUploading
+  const hasError = (attachment as any).variant === 'chat' && (attachment as any).error
+  const progress = (attachment as any).variant === 'chat' ? (attachment as any).uploadProgress || 0 : 100
 
   const handleRemove = () => {
     removeAttachment({ id: attachment.id })
@@ -159,7 +160,7 @@ export function AttachmentItem({ attachment, index }: AttachmentItemProps) {
         {/* Error message */}
         {hasError && (
           <div className="text-xs text-red-600 mt-1">
-            {attachment.error}
+            {(attachment as any).error}
           </div>
         )}
 
@@ -167,8 +168,8 @@ export function AttachmentItem({ attachment, index }: AttachmentItemProps) {
         {!isUploading && !hasError && (
           <div className={cn('text-xs opacity-75', colors.text)}>
             {attachment.type.toUpperCase()}
-            {attachment.variant === 'knowledge' && ' • Knowledge'}
-            {attachment.variant === 'chat' && ' • Uploaded'}
+            {(attachment as any).variant === 'knowledge' && ' • Knowledge'}
+            {(attachment as any).variant === 'chat' && ' • Uploaded'}
           </div>
         )}
       </div>

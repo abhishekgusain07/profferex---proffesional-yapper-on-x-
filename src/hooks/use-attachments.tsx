@@ -10,20 +10,11 @@ import type {
 import { SelectedKnowledgeDocument } from '@/components/knowledge-selector'
 import toast from 'react-hot-toast'
 
-export interface LocalAttachment {
-  variant: 'chat'
-  id: string
-  title: string
-  type: 'image' | 'pdf' | 'docx' | 'txt' | 'video' | 'manual'
-  localUrl?: string
-  uploadProgress: number
-  isUploading: boolean
-  error?: string
-}
+// Remove LocalAttachment - use ChatAttachment directly
 
 interface AttachmentsContextType {
   // State
-  attachments: (Attachment | LocalAttachment)[]
+  attachments: Attachment[]
   hasUploading: boolean
   
   // Actions
@@ -34,8 +25,8 @@ interface AttachmentsContextType {
   clearAttachments: () => void
   
   // Utils
-  getAttachmentById: (id: string) => Attachment | LocalAttachment | undefined
-  getAttachmentsByType: (type: Attachment['type']) => (Attachment | LocalAttachment)[]
+  getAttachmentById: (id: string) => Attachment | undefined
+  getAttachmentsByType: (type: Attachment['type']) => Attachment[]
 }
 
 const AttachmentsContext = createContext<AttachmentsContextType | null>(null)
@@ -119,12 +110,12 @@ async function uploadFile(file: File): Promise<{ fileKey: string; uploadProgress
 }
 
 export function AttachmentsProvider({ children }: PropsWithChildren) {
-  const [attachments, setAttachments] = useState<(Attachment | LocalAttachment)[]>([])
+  const [attachments, setAttachments] = useState<Attachment[]>([])
 
   // Check if any attachments are currently uploading
   const hasUploading = attachments.some(
-    (attachment): attachment is LocalAttachment => 
-      'isUploading' in attachment && attachment.isUploading
+    (attachment) => 
+      attachment.variant === 'chat' && attachment.isUploading
   )
 
   // Add chat attachment (file upload)
@@ -144,7 +135,7 @@ export function AttachmentsProvider({ children }: PropsWithChildren) {
       title: file.name,
       type,
       variant: 'chat',
-      fileKey: '', // Will be set after upload
+      // fileKey is optional during upload
       uploadProgress: 0,
       isUploading: true,
     }
