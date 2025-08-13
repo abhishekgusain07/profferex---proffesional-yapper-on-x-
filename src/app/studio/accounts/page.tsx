@@ -6,9 +6,44 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Loader2, Plus, Users, ExternalLink, Trash2, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Loader2, Plus, Users, ExternalLink, Trash2, CheckCircle, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Save, Sparkles, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Separator } from '@/components/ui/separator'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+
+interface TweetCardProps {
+  src?: string
+  username: string
+  name: string
+  text?: string
+}
+
+const TweetCard = ({ name, username, src, text }: TweetCardProps) => {
+  return (
+    <div className="w-full">
+      <div className="text-left rounded-lg bg-white border border-dashed border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-start gap-3 p-6">
+          <Avatar className="h-10 w-10 rounded-full border border-slate-200">
+            <AvatarImage src={src} alt={`@${username}`} />
+            <AvatarFallback className="bg-blue-100 text-blue-600 text-sm">
+              {name.slice(0, 1).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold">{name}</span>
+              <span className="text-sm text-slate-600">@{username}</span>
+            </div>
+            <div className="mt-1 text-base whitespace-pre-line">{text}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const AccountsPage = () => {
   const { data: session, isPending: sessionLoading } = useSession()
@@ -19,8 +54,16 @@ const AccountsPage = () => {
   const [switchingAccount, setSwitchingAccount] = useState<string | null>(null)
   const [connectionMessage, setConnectionMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [connectModalOpen, setConnectModalOpen] = useState(false)
+  const [tweetLink, setTweetLink] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [isStyleSettingsOpen, setIsStyleSettingsOpen] = useState(false)
 
   const { data: twitterAccounts, isLoading: accountsLoading, refetch: refetchAccounts } = trpc.twitter.getAccounts.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
+
+  const { data: activeAccount } = trpc.twitter.getActiveAccount.useQuery(
     undefined,
     { enabled: !!session }
   )
@@ -100,6 +143,48 @@ const AccountsPage = () => {
       setSwitchingAccount(null)
     },
   })
+
+  // Style-related tRPC hooks
+  const { data: style, refetch: refetchStyle } = trpc.style.get.useQuery(
+    undefined,
+    { enabled: !!session }
+  )
+
+  const importTweetMutation = trpc.style.import.useMutation({
+    onSuccess: () => {
+      setTweetLink('')
+      refetchStyle()
+    },
+    onError: (error) => {
+      setConnectionMessage({ type: 'error', message: error.message })
+    },
+  })
+
+  const deleteTweetMutation = trpc.style.delete.useMutation({
+    onSuccess: () => {
+      refetchStyle()
+    },
+    onError: (error) => {
+      setConnectionMessage({ type: 'error', message: error.message })
+    },
+  })
+
+  const savePromptMutation = trpc.style.save.useMutation({
+    onSuccess: () => {
+      refetchStyle()
+      setConnectionMessage({ type: 'success', message: 'Style saved successfully!' })
+    },
+    onError: (error) => {
+      setConnectionMessage({ type: 'error', message: error.message })
+    },
+  })
+
+  // Update prompt state when style data loads
+  useEffect(() => {
+    if (style?.prompt && typeof style.prompt === 'string') {
+      setPrompt(style.prompt)
+    }
+  }, [style?.prompt])
 
   const handleConnectTwitter = () => {
     setConnectModalOpen(true)
@@ -520,28 +605,157 @@ const AccountsPage = () => {
               <CardDescription>Customize AI assistant output</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start justify-between p-4 bg-slate-50/50 rounded-lg border border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10 border border-slate-200">
-                      <AvatarImage src={session.user?.image || undefined} />
-                      <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
-                        {session.user?.name?.charAt(0) || session.user?.email?.charAt(0) || 'U'}
-                      </AvatarFallback>
-                    </Avatar>
+              <Collapsible open={isStyleSettingsOpen} onOpenChange={setIsStyleSettingsOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="w-full group">
+                    <div className="flex items-center justify-between p-4 rounded-t-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        {activeAccount && (
+                          <Avatar className="w-10 h-10 border border-slate-200">
+                            <AvatarImage src={activeAccount.profileImage} alt={`@${activeAccount.username}`} />
+                            <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
+                              {activeAccount.displayName?.charAt(0) || activeAccount.username?.charAt(0) || 'T'}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                        <div className="text-left">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-slate-800">
+                              Writing Style & References
+                            </h3>
+                          </div>
+                          {activeAccount && (
+                            <p className="text-sm text-slate-600">For @{activeAccount.username}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isStyleSettingsOpen ? (
+                          <ChevronDown className="w-5 h-5 text-slate-500 transition-transform" />
+                        ) : (
+                          <ChevronRight className="w-5 h-5 text-slate-500 transition-transform" />
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="bg-white border border-t-0 border-slate-200 rounded-b-lg space-y-6 pt-4 pb-4">
+                  {/* Fine-Tune Writing Style */}
+                  <div className="px-4 space-y-4">
                     <div>
-                      <h4 className="font-medium text-slate-900">Writing Style & References</h4>
-                      <p className="text-sm text-slate-600">
-                        For @{session.user?.email?.split('@')[0] || 'your-handle'}
+                      <h4 className="text-base font-semibold text-slate-800">
+                        Fine-Tune Writing Style
+                      </h4>
+                      <p className="text-slate-600 text-sm">
+                        Describe your writing preferences, tone, and style patterns
                       </p>
                     </div>
+
+                    <Textarea
+                      className="min-h-32"
+                      placeholder="My tweets always use this emoji (◆) for bullet points and usually consist of a short, catchy intro hook and three bullet points. I love the 🎉 emoji"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                    />
+
+                    <Button
+                      onClick={() => savePromptMutation.mutate({ prompt })}
+                      size="sm"
+                      disabled={savePromptMutation.isPending}
+                      className="w-fit bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                    >
+                      {savePromptMutation.isPending ? (
+                        <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="mr-2 w-4 h-4" />
+                      )}
+                      Save Writing Style
+                    </Button>
                   </div>
-                  <Button variant="outline" size="sm" disabled>
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Configure
-                  </Button>
-                </div>
-              </div>
+
+                  <Separator className="mx-4" />
+
+                  {/* Style Reference Tweets */}
+                  <div className="px-4 space-y-4">
+                    <div>
+                      <h4 className="text-base font-semibold text-slate-800">
+                        Style Reference Tweets
+                      </h4>
+                      <p className="text-slate-600 text-sm">
+                        Import tweets that exemplify your desired writing style
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        value={tweetLink}
+                        onChange={(e) => setTweetLink(e.target.value)}
+                        className="flex-1"
+                        type="text"
+                        placeholder="https://x.com/username/status/1234567890123456789"
+                      />
+                      <Button
+                        onClick={() => importTweetMutation.mutate({ link: tweetLink })}
+                        disabled={importTweetMutation.isPending || !tweetLink.trim()}
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                      >
+                        {importTweetMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          'Import'
+                        )}
+                      </Button>
+                    </div>
+
+                    <div className="">
+                      {style?.tweets?.length ? (
+                        <div className="space-y-4">
+                          <p className="text-sm font-medium text-slate-700">
+                            {style.tweets.length} reference tweet{style.tweets.length > 1 ? 's' : ''}
+                          </p>
+                          <div className="space-y-3">
+                            {style.tweets.map((tweet, index) => (
+                              <div className="relative" key={index}>
+                                <Button
+                                  variant="destructive"
+                                  className="absolute top-3 right-3 w-fit p-1.5 text-white aspect-square z-10"
+                                  onClick={() => deleteTweetMutation.mutate({ tweetId: tweet.id })}
+                                  disabled={deleteTweetMutation.isPending}
+                                  size="sm"
+                                >
+                                  {deleteTweetMutation.isPending ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <X className="w-4 h-4" />
+                                  )}
+                                </Button>
+                                <TweetCard
+                                  username={tweet.author.username}
+                                  name={tweet.author.name}
+                                  src={tweet.author.profile_image_url}
+                                  text={tweet.text}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <Sparkles className="w-10 h-10 text-slate-300 mb-3" />
+                          <p className="text-sm font-medium text-slate-700">
+                            No imported tweets yet
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                            Import tweets that match your desired writing style
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </CardContent>
           </Card>
         </div>
