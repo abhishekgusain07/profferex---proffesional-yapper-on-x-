@@ -5,6 +5,8 @@ import { DefaultChatTransport } from 'ai'
 import { useChat } from '@ai-sdk/react'
 import { nanoid } from 'nanoid'
 import { useQuery } from '@tanstack/react-query'
+import { useQueryState } from 'nuqs'
+import { trpc } from '@/trpc/client'
 import toast from 'react-hot-toast'
 
 import type { ChatMessage, ChatContextType, MessageMetadata } from '@/types/chat'
@@ -31,13 +33,19 @@ interface ChatProviderProps extends PropsWithChildren {
   initialConversationId?: string
 }
 
-export function ChatProvider({ children, initialConversationId }: ChatProviderProps) {
-  // Stabilize chatId across renders
-  const chatIdRef = useRef<string>(initialConversationId ?? nanoid())
-  const chatId = chatIdRef.current
+const defaultValue = nanoid()
+
+export function ChatProvider({ children }: ChatProviderProps) {
+  const [id, setId] = useQueryState('chatId', {
+    defaultValue,
+  })
+
+  const startNewChat = async (newId?: string) => {
+    setId(newId || nanoid())
+  }
 
   const chat = useChat<any>({
-    id: chatId,
+    id,
     transport: new DefaultChatTransport({
       api: '/api/chat/chat',
       prepareSendMessagesRequest({ messages, id }) {
@@ -51,10 +59,10 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
   })
 
   const { data } = useQuery({
-    queryKey: ['chat-history', chatId],
+    queryKey: ['initial-messages', id],
     queryFn: async () => {
       try {
-        const res = await fetch(`/api/chat/get_message_history?chatId=${chatId}`)
+        const res = await fetch(`/api/chat/get_message_history?chatId=${id}`)
         if (!res.ok) return EMPTY_MESSAGES
         return (await res.json()) as { messages: unknown[] }
       } catch (error) {
@@ -83,10 +91,10 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
       content: m.parts?.map((p) => (p.type === 'text' ? p.text : '')).join('') ?? m.content ?? '',
       parts: m.parts || [], // Preserve original parts structure for Messages component
       metadata: m.metadata as MessageMetadata | undefined,
-      chatId: chatId,
+      chatId: id,
       createdAt: new Date(),
     })) as ChatMessage[]
-  }, [chat.messages, chatId])
+  }, [chat.messages, id])
 
   // Memoize callback functions to prevent unnecessary re-renders
   const sendMessage = useCallback(async (content: string, metadata?: MessageMetadata) => {
@@ -102,23 +110,20 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
     chat.stop()
   }, [chat])
 
-  const startNewConversation = useCallback(() => {
-    const newChatId = nanoid()
-    chatIdRef.current = newChatId
-    clearChat()
-  }, [clearChat])
-
   const loadConversation = useCallback(async (conversationId: string) => {
-    chatIdRef.current = conversationId
-    // The useQuery will automatically refetch with the new chatId
-  }, [])
+    setId(conversationId)
+    // The useQuery will automatically refetch with the new id
+  }, [setId])
 
   const stopGeneration = useCallback(() => {
     chat.stop()
   }, [chat])
 
-  const contextValue: ChatContextType = useMemo(() => ({
-    conversationId: chatId,
+  const contextValue = useMemo(() => ({ 
+    ...chat, 
+    startNewChat, 
+    setId,
+    conversationId: id,
     messages: transformedMessages,
     isLoading: chat.status === 'submitted' || chat.status === 'streaming',
     isStreaming: chat.status === 'streaming',
@@ -127,13 +132,13 @@ export function ChatProvider({ children, initialConversationId }: ChatProviderPr
     sendMessage,
     regenerateResponse: async () => {},
     clearChat,
-    startNewConversation,
+    startNewConversation: startNewChat,
     loadConversation,
     deleteMessage: async () => {},
     editMessage: async () => {},
     stop,
     stopGeneration,
-  }), [chatId, transformedMessages, chat.status, sendMessage, clearChat, startNewConversation, loadConversation, stop, stopGeneration])
+  }), [chat, startNewChat, setId, id, transformedMessages, sendMessage, clearChat, loadConversation, stop, stopGeneration])
 
   return (
     <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
@@ -147,52 +152,23 @@ export function useChatContext(): ChatContextType {
 }
 
 export function useChatConversations() {
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['chat-conversations'],
-    queryFn: async () => {
-      try {
-        // For now return mock data - this will be replaced with tRPC call
-        const mockConversations = [
-          {
-            id: 'conv-1',
-            title: 'Twitter Strategy Discussion',
-            lastUpdated: '2024-08-12T09:30:00Z',
-            messageCount: 5,
-          },
-          {
-            id: 'conv-2', 
-            title: 'Content Ideas for Tech Blog',
-            lastUpdated: '2024-08-11T14:20:00Z',
-            messageCount: 3,
-          },
-        ]
-        return { 
-          conversations: mockConversations, 
-          total: mockConversations.length, 
-          hasMore: false 
-        }
-      } catch (error) {
-        console.error('Failed to fetch conversations:', error)
-        return { conversations: [], total: 0, hasMore: false }
-      }
-    },
-  })
+  const { data, isLoading, refetch } = trpc.chat.history.useQuery()
+  const deleteConversationMutation = trpc.chat.deleteConversation.useMutation()
 
   const deleteConversation = useCallback(async (conversationId: string) => {
     try {
-      // TODO: Implement with tRPC
-      console.log('Deleting conversation:', conversationId)
+      await deleteConversationMutation.mutateAsync({ conversationId })
       await refetch()
     } catch (error) {
       console.error('Failed to delete conversation:', error)
     }
-  }, [refetch])
+  }, [deleteConversationMutation, refetch])
 
   return {
-    conversations: data?.conversations || [],
+    conversations: data?.chatHistory || [],
     isLoading,
-    hasMore: data?.hasMore || false,
-    total: data?.total || 0,
+    hasMore: false,
+    total: data?.chatHistory?.length || 0,
     deleteConversation,
     loadMore: () => {},
     refetch,
