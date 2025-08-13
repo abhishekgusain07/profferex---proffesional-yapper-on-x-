@@ -13,8 +13,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { useAttachments } from '@/hooks/use-attachments'
-import { useChatContext } from '@/hooks/use-chat'
-import { useQuery } from '@tanstack/react-query'
+import { useChatContext, useChatConversations } from '@/hooks/use-chat'
 import { motion } from 'framer-motion'
 import { formatDistanceToNow } from 'date-fns'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -197,34 +196,10 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 
-  const { data: chatHistoryData, isPending: isHistoryPending } = useQuery({
-    queryKey: ['chat-conversations-modal'],
-    queryFn: async () => {
-      // Mock data for chat history dialog
-      const mockConversations = [
-        {
-          id: 'conv-1',
-          title: 'Twitter Strategy Discussion',
-          lastUpdated: '2024-08-12T09:30:00Z',
-          messageCount: 5,
-        },
-        {
-          id: 'conv-2', 
-          title: 'Content Ideas for Tech Blog',
-          lastUpdated: '2024-08-11T14:20:00Z',
-          messageCount: 3,
-        },
-        {
-          id: 'conv-3',
-          title: 'AI Tools for Social Media',
-          lastUpdated: '2024-08-10T16:45:00Z',
-          messageCount: 8,
-        },
-      ]
-      return { conversations: mockConversations }
-    },
-    enabled: isHistoryOpen,
-  })
+  const { 
+    conversations: chatConversations, 
+    isLoading: isHistoryPending 
+  } = useChatConversations()
 
   const { 
     conversationId, 
@@ -420,8 +395,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
             <DialogDescription className="leading-none">
               {isHistoryPending
                 ? 'Loading...'
-                : chatHistoryData?.conversations?.length
-                  ? `Showing ${chatHistoryData?.conversations?.length} most recent chats`
+                : chatConversations?.length
+                  ? `Showing ${chatConversations?.length} most recent chats`
                   : 'No chat history yet'}
             </DialogDescription>
           </DialogHeader>
@@ -429,8 +404,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           {
             <div className="overflow-y-auto max-h-[60vh] -mx-2 px-2">
               <div className="space-y-2">
-                {chatHistoryData?.conversations?.length ? (
-                  chatHistoryData.conversations.map((chat) => (
+                {chatConversations?.length ? (
+                  chatConversations.map((chat) => (
                     <button
                       key={chat.id}
                       onClick={() => handleChatSelect(chat.id)}
