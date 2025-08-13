@@ -4,6 +4,7 @@ import { twitterRouter } from './twitter'
 import { filesRouter } from './files'
 import { chatRouter } from './chat'
 import { knowledgeRouter } from './knowledge'
+import { styleRouter } from './style'
 
 export const appRouter = createTRPCRouter({
   example: exampleRouter,
@@ -11,6 +12,7 @@ export const appRouter = createTRPCRouter({
   files: filesRouter,
   chat: chatRouter,
   knowledge: knowledgeRouter,
+  style: styleRouter,
 })
 
 export type AppRouter = typeof appRouter
