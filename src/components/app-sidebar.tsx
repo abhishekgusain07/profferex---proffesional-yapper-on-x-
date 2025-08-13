@@ -33,8 +33,7 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { Input } from './ui/input'
-import type { Attachment } from '@/types/chat'
-import type { LocalAttachment } from '@/hooks/use-attachments'
+import type { Attachment, ChatAttachment } from '@/types/chat'
 
 const ChatInput = ({
   onSubmit,
@@ -110,7 +109,7 @@ const ChatInput = ({
               transition={{ duration: 0.2, delay: i * 0.1 }}
             >
               <AttachmentItem
-                attachment={attachment as Attachment | LocalAttachment}
+                attachment={attachment as Attachment | ChatAttachment}
                 index={i}
               />
             </motion.div>
@@ -207,13 +206,18 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   )
 
   const { 
-    id: conversationId, 
+    conversationId,
+    id,
     messages, 
     sendMessage, 
     startNewConversation, 
-    setId, 
+    loadConversation,
+    setId,
     status,
-    stopGeneration 
+    stopGeneration,
+    isLoading,
+    isStreaming,
+    error
   } = useChatContext()
   
   const { attachments, removeAttachment, addChatAttachment } = useAttachments()
@@ -234,7 +238,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
       if (!text.trim()) return
 
       if (!Boolean(searchParams.get('chatId'))) {
-        updateURL('chatId', conversationId)
+        updateURL('chatId', id || conversationId || '')
       }
 
       // Properly narrow to Attachment[] (exclude uploading chat files)
@@ -272,7 +276,16 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   const handleChatSelect = async (chatId: string) => {
     setIsHistoryOpen(false)
-    setId(chatId)
+    
+    // Update URL explicitly
+    updateURL('chatId', chatId)
+    
+    // Try both methods for compatibility
+    try {
+      await loadConversation(chatId)
+    } catch (e) {
+      await setId(chatId)
+    }
   }
 
   return (
@@ -379,7 +392,13 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
           <SidebarGroup className="h-full py-0 px-0">
             <div className="h-full space-y-6">
-              <Messages className="flex-1" />
+              <Messages 
+                messages={messages}
+                isLoading={isLoading}
+                isStreaming={isStreaming}
+                error={error}
+                className="flex-1" 
+              />
             </div>
           </SidebarGroup>
         </SidebarContent>

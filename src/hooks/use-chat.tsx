@@ -25,7 +25,8 @@ export function ChatProvider({ children }: ChatProviderProps) {
   })
 
   const startNewChat = async (newId?: string) => {
-    setId(newId || nanoid())
+    const chatId = newId || nanoid()
+    setId(chatId)
   }
 
   const chat = useChat<any>({
@@ -42,18 +43,26 @@ export function ChatProvider({ children }: ChatProviderProps) {
     },
   })
 
-  const { data } = trpc.chat.get_message_history.useQuery(
+  const { data, error: queryError, isLoading: queryLoading } = trpc.chat.get_message_history.useQuery(
     { chatId: id },
     {
       initialData: { messages: [] },
+      refetchOnWindowFocus: false,
     }
   )
 
   useEffect(() => {
+    if (queryError) {
+      return
+    }
+    
     if (data?.messages) {
       chat.setMessages(data.messages as never[])
+    } else {
+      // Ensure we clear messages when switching to a chat with no messages
+      chat.setMessages([] as never[])
     }
-  }, [data])
+  }, [data, id, queryError, queryLoading])
 
   // Memoize message transformation to prevent unnecessary recalculations
   const transformedMessages = useMemo(() => {
@@ -93,8 +102,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
   const contextValue = useMemo(() => ({ 
     ...chat, 
     startNewChat, 
-    setId,
+    setId: async (newId: string) => { setId(newId) },
     conversationId: id,
+    id: id, // Add id for compatibility 
     messages: transformedMessages,
     isLoading: chat.status === 'submitted' || chat.status === 'streaming',
     isStreaming: chat.status === 'streaming',

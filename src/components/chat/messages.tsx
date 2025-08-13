@@ -2,7 +2,6 @@
 
 import { memo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useChatContext } from '@/hooks/use-chat'
 import type { ChatMessage } from '@/types/chat'
 import { MessageWrapper } from './message-wrapper'
 import { LoadingMessage } from './loading-message'
@@ -12,13 +11,17 @@ import { StreamingMessage } from './streaming-message'
 import ReactMarkdown from 'react-markdown'
 
 interface MessagesProps {
+  messages: ChatMessage[]
+  isLoading: boolean
+  isStreaming: boolean
+  error?: string | null
   className?: string
 }
 
-export const Messages = memo(({ className }: MessagesProps) => {
-  const { messages, isLoading, isStreaming, error } = useChatContext()
+export const Messages = memo(({ messages, isLoading, isStreaming, error, className }: MessagesProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {

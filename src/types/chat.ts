@@ -150,6 +150,7 @@ export interface ChatHistoryItem {
 export interface ChatContextType {
   // Current conversation
   conversationId: string | null
+  id: string // Current chat id for compatibility
   messages: ChatMessage[]
   
   // Chat state
@@ -164,6 +165,7 @@ export interface ChatContextType {
   clearChat: () => void
   startNewConversation: () => void
   loadConversation: (id: string) => Promise<void>
+  setId: (id: string) => Promise<void> // Add setId for compatibility
   
   // Message management
   deleteMessage: (messageId: string) => Promise<void>
