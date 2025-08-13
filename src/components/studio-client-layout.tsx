@@ -5,9 +5,9 @@ import { LeftSidebar } from '@/components/left-sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import { AppSidebarInset } from '@/components/providers/app-sidebar-inset'
 import { DashboardProviders } from '@/components/providers/dashboard-providers'
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { SidebarProvider, useSidebar } from '@/components/ui/sidebar'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
-import { useChatContext } from '@/hooks/use-chat'
+import { useCmdL } from '@/hooks/use-keyboard-shortcut'
 
 interface LayoutProps extends PropsWithChildren {
   hideAppSidebar?: boolean
@@ -30,6 +30,18 @@ const initialConfig = {
   nodes: [],
 }
 
+// Component that adds keyboard shortcut to toggle the right sidebar (Assistant chat)
+function RightSidebarKeyboardShortcut({ children }: { children: React.ReactNode }) {
+  const { toggleSidebar } = useSidebar()
+
+  // Register Cmd+L (Mac) / Ctrl+L (Windows/Linux) shortcut to toggle right sidebar
+  useCmdL(() => {
+    toggleSidebar()
+  })
+
+  return <>{children}</>
+}
+
 export default function StudioClientLayout({
   children,
   width,
@@ -50,15 +62,17 @@ export default function StudioClientLayout({
         </SidebarProvider>
 
         <SidebarProvider defaultOpen={defaultOpen} defaultWidth={width?.value || '32rem'}>
-          {hideAppSidebar ? (
-            <AppSidebarInset>{children}</AppSidebarInset>
-          ) : (
-            <LexicalComposer initialConfig={initialConfig}>
-              <AppSidebar>
-                <AppSidebarInset>{children}</AppSidebarInset>
-              </AppSidebar>
-            </LexicalComposer>
-          )}
+          <RightSidebarKeyboardShortcut>
+            {hideAppSidebar ? (
+              <AppSidebarInset>{children}</AppSidebarInset>
+            ) : (
+              <LexicalComposer initialConfig={initialConfig}>
+                <AppSidebar>
+                  <AppSidebarInset>{children}</AppSidebarInset>
+                </AppSidebar>
+              </LexicalComposer>
+            )}
+          </RightSidebarKeyboardShortcut>
         </SidebarProvider>
       </div>
     </DashboardProviders>
