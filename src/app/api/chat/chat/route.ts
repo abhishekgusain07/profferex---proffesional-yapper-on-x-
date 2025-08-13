@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
         // Update chat history list
         try {
           const historyListKey = `chat:history-list:${session.user.email}`
-          const existingHistory = (await redis.get(historyListKey)) as Array<{id: string, title: string, lastUpdated: string}> || []
+          const existingHistory = (await redis.get(historyListKey)) as Array<{id: string, title: string, lastUpdated: string, messageCount: number}> || []
           
           // Get title from first user message
           const firstUserMessage = messages.find((m: any) => m.role === 'user')
@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
             id,
             title: title + (title.length > 50 ? '...' : ''),
             lastUpdated: new Date().toISOString(),
+            messageCount: messages.length,
           }
           
           // Remove existing entry and add new one at the beginning

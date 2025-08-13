@@ -38,6 +38,7 @@ export interface ChatHistoryItem {
   id: string
   title: string
   lastUpdated: string
+  messageCount: number
 }
 
 // Rate limiting setup
