@@ -53,7 +53,7 @@ export async function getServerScheduledTweets() {
   }
 }
 
-export async function getServerPostedTweets(params = { limit: 20 }) {
+export async function getServerPostedTweets(params = { limit: 20, search: undefined as string | undefined }) {
   try {
     const context = await createTRPCContext()
     if (!context.user) {
@@ -61,7 +61,7 @@ export async function getServerPostedTweets(params = { limit: 20 }) {
     }
 
     const caller = createCaller(context)
-    const postedTweets = await caller.twitter.getPosted(params)
+    const postedTweets = await caller.twitter.getPosted(params as any)
     return postedTweets
   } catch (error) {
     console.error('Error getting server posted tweets:', error)

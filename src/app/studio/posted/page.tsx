@@ -21,6 +21,7 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '@/components/ui/dialog'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface SearchFilters {
   accountId?: string
@@ -39,6 +40,8 @@ const PostedPage = () => {
   // Performance monitoring
   const performance = usePerformanceMonitor('PostedPage', [searchQuery, searchFilters])
 
+  const queryClient = useQueryClient()
+
   // Get user's Twitter accounts for filter dropdown
   const { data: twitterAccounts } = trpc.twitter.getAccounts.useQuery(
     undefined,
@@ -52,6 +55,12 @@ const PostedPage = () => {
     ...searchFilters
   }), [searchQuery, searchFilters])
 
+  const initialPosted = queryClient.getQueryData([
+    'twitter',
+    'getPosted',
+    { limit: 20 },
+  ]) as { pages: any[]; pageParams: any[] } | undefined
+
   const { 
     data: postedData, 
     isLoading: postsLoading,
@@ -63,6 +72,10 @@ const PostedPage = () => {
     { 
       enabled: !!session,
       getNextPageParam: (lastPage) => lastPage.nextCursor,
+      // Hydrate if we have initial server data with the same base key
+      initialData: queryInput.search || queryInput.accountId || queryInput.sortBy
+        ? undefined
+        : initialPosted,
     }
   )
 

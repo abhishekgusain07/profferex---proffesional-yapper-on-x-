@@ -1,14 +1,15 @@
 'use client'
 
+import { createContext, PropsWithChildren, useContext, useEffect } from 'react'
 import { trpc } from '@/trpc/client'
 import { useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useEffect, type ReactNode } from 'react'
 
-interface TwitterDataProviderProps {
-  children: ReactNode
+interface TwitterDataProviderProps extends PropsWithChildren {
   initialTwitterData?: {
     accounts?: any[] | null
     activeAccount?: any | null
+    posted?: any | null
+    scheduled?: any[] | null
   } | null
 }
 
@@ -50,6 +51,16 @@ export function TwitterDataProvider({ children, initialTwitterData }: TwitterDat
     if (initialTwitterData?.activeAccount) {
       queryClient.setQueryData(['twitter', 'getActiveAccount'], initialTwitterData.activeAccount)
     }
+    if (initialTwitterData?.posted) {
+      // Infinite query hydration: store as one page
+      queryClient.setQueryData(['twitter', 'getPosted', { limit: 20 }], {
+        pages: [initialTwitterData.posted],
+        pageParams: [undefined],
+      })
+    }
+    if (initialTwitterData?.scheduled) {
+      queryClient.setQueryData(['twitter', 'getScheduled'], initialTwitterData.scheduled)
+    }
   }, [initialTwitterData, queryClient])
 
   return (
@@ -67,7 +78,7 @@ export function TwitterDataProvider({ children, initialTwitterData }: TwitterDat
 
 export function useTwitterData() {
   const context = useContext(TwitterDataContext)
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useTwitterData must be used within a TwitterDataProvider')
   }
   return context
