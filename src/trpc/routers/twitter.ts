@@ -11,6 +11,7 @@ import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { qstash } from '@/lib/qstash'
 import { AccountCache, CachedAccountData } from '@/lib/account-cache'
 import { fetchTweetAnalytics } from '@/lib/twitter-analytics'
+import { ENABLE_TWITTER_ANALYTICS } from '@/constants/feature-flags'
 
 export const twitterRouter = createTRPCRouter({
   createLink: protectedProcedure
@@ -1055,9 +1056,9 @@ export const twitterRouter = createTRPCRouter({
           try {
             const cachedAccount = await AccountCache.getAccount(ctx.user.id, tweet.account.accountId)
             
-            // Fetch real analytics if twitterId exists and account has valid credentials
+            // Fetch real analytics if feature enabled, twitterId exists and account has valid credentials
             let analytics = null
-            if (tweet.twitterId) {
+            if (ENABLE_TWITTER_ANALYTICS && tweet.twitterId) {
               try {
                 // Get account credentials from database for analytics API call
                 const dbAccount = await db

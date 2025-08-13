@@ -22,6 +22,7 @@ import {
   DialogTrigger 
 } from '@/components/ui/dialog'
 import { useQueryClient } from '@tanstack/react-query'
+import { ENABLE_TWITTER_ANALYTICS } from '@/constants/feature-flags'
 
 interface SearchFilters {
   accountId?: string
@@ -216,6 +217,14 @@ const PostedPage = () => {
               })) || []}
               className="mb-6"
             />
+          )}
+
+          {!ENABLE_TWITTER_ANALYTICS && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="text-sm text-yellow-800">
+                Analytics are currently using dummy values. To enable real analytics, set the feature flag `ENABLE_TWITTER_ANALYTICS=true` (and `NEXT_PUBLIC_ENABLE_TWITTER_ANALYTICS=true` for client) in your environment and restart the app.
+              </div>
+            </div>
           )}
         </div>
 

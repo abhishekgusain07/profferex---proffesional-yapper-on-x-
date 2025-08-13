@@ -2,6 +2,7 @@ import StudioClientLayout from '@/components/studio-client-layout'
 import { cookies } from 'next/headers'
 import { PropsWithChildren } from 'react'
 import { getServerTwitterAccounts, getServerActiveAccount, getServerPostedTweets, getServerScheduledTweets } from '@/lib/server-twitter'
+import { ENABLE_TWITTER_ANALYTICS } from '@/constants/feature-flags'
 
 export default async function Layout({ children }: PropsWithChildren) {
   const cookieStore = await cookies()
@@ -12,7 +13,8 @@ export default async function Layout({ children }: PropsWithChildren) {
   const [twitterAccounts, activeAccount, posted, scheduled] = await Promise.all([
     getServerTwitterAccounts(),
     getServerActiveAccount(),
-    getServerPostedTweets({ limit: 20 }),
+    // Only prefetch posted when analytics are enabled; otherwise skip to avoid API use
+    ENABLE_TWITTER_ANALYTICS ? getServerPostedTweets({ limit: 20 }) : Promise.resolve(null),
     getServerScheduledTweets(),
   ])
 
