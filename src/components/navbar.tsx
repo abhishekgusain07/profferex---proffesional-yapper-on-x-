@@ -8,7 +8,8 @@ import { Menu, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { Icons } from './icons'
 import { GITHUB_REPO } from '@/app/constants/misc'
-import { useSession, signOut } from '@/lib/auth-client'
+import { signOut } from '@/lib/auth-client'
+import { useSessionContext } from '@/components/session-provider'
 
 const Logo = ({ className }: { className?: string }) => (
   <Link href="/" className={cn('-m-1.5 p-1.5 flex items-center gap-1.5', className)}>
@@ -108,7 +109,7 @@ const ActionButtons = ({
 
 const Navbar = ({ title }: { title: string }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
-  const { data: session, isPending } = useSession()
+  const { session, isLoading: isPending } = useSessionContext()
 
   React.useEffect(() => {
     const originalOverflow = document.body.style.overflow
