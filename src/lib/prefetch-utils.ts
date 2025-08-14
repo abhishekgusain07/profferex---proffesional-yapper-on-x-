@@ -2,16 +2,19 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { ENABLE_TWITTER_ANALYTICS } from '@/constants/feature-flags'
 
 // Prefetch common data on router navigation
 export function usePrefetchOnHover() {
   const queryClient = useQueryClient()
 
   const prefetchPostedTweets = () => {
+    if (!ENABLE_TWITTER_ANALYTICS) return
     try {
       queryClient.prefetchInfiniteQuery({
         queryKey: ['twitter', 'getPosted', { limit: 20 }],
         staleTime: 5 * 60 * 1000, // 5 minutes
+        initialPageParam: undefined,
       })
     } catch (error) {
       console.warn('Failed to prefetch posted tweets:', error)
@@ -90,10 +93,13 @@ export function warmNavCache() {
     try {
       // If user is on studio, warm posted/scheduled cache
       if (window.location.pathname === '/studio') {
-        queryClient.prefetchInfiniteQuery({
-          queryKey: ['twitter', 'getPosted', { limit: 20 }],
-          staleTime: 5 * 60 * 1000
-        })
+        if (ENABLE_TWITTER_ANALYTICS) {
+          queryClient.prefetchInfiniteQuery({
+            queryKey: ['twitter', 'getPosted', { limit: 20 }],
+            staleTime: 5 * 60 * 1000,
+            initialPageParam: undefined,
+          })
+        }
         queryClient.prefetchQuery({
           queryKey: ['twitter', 'getScheduled'],
           staleTime: 30 * 1000
@@ -110,10 +116,13 @@ export function warmNavCache() {
       
       // If user is on scheduled, warm posted cache
       if (window.location.pathname.includes('/scheduled')) {
-        queryClient.prefetchInfiniteQuery({
-          queryKey: ['twitter', 'getPosted', { limit: 20 }],
-          staleTime: 5 * 60 * 1000
-        })
+        if (ENABLE_TWITTER_ANALYTICS) {
+          queryClient.prefetchInfiniteQuery({
+            queryKey: ['twitter', 'getPosted', { limit: 20 }],
+            staleTime: 5 * 60 * 1000,
+            initialPageParam: undefined,
+          })
+        }
       }
     } catch (error) {
       console.warn('Failed to warm cache:', error)
