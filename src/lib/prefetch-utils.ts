@@ -71,8 +71,8 @@ export function useBackgroundRefresh() {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         // User came back to tab, refresh critical data
-        queryClient.invalidateQueries(['twitter', 'getActiveAccount'])
-        queryClient.invalidateQueries(['twitter', 'getScheduled'])
+        queryClient.invalidateQueries({ queryKey: ['twitter', 'getActiveAccount'] })
+        queryClient.invalidateQueries({ queryKey: ['twitter', 'getScheduled'] })
       }
     }
 
@@ -87,20 +87,36 @@ export function warmNavCache() {
   
   // Warm cache for likely next pages
   const warmCache = () => {
-    // If user is on studio, warm posted/scheduled cache
-    if (window.location.pathname === '/studio') {
-      queryClient.prefetchInfiniteQuery(['twitter', 'getPosted', { limit: 20 }])
-      queryClient.prefetchQuery(['twitter', 'getScheduled'])
-    }
-    
-    // If user is on posted, warm scheduled cache
-    if (window.location.pathname.includes('/posted')) {
-      queryClient.prefetchQuery(['twitter', 'getScheduled'])
-    }
-    
-    // If user is on scheduled, warm posted cache
-    if (window.location.pathname.includes('/scheduled')) {
-      queryClient.prefetchInfiniteQuery(['twitter', 'getPosted', { limit: 20 }])
+    try {
+      // If user is on studio, warm posted/scheduled cache
+      if (window.location.pathname === '/studio') {
+        queryClient.prefetchInfiniteQuery({
+          queryKey: ['twitter', 'getPosted', { limit: 20 }],
+          staleTime: 5 * 60 * 1000
+        })
+        queryClient.prefetchQuery({
+          queryKey: ['twitter', 'getScheduled'],
+          staleTime: 30 * 1000
+        })
+      }
+      
+      // If user is on posted, warm scheduled cache
+      if (window.location.pathname.includes('/posted')) {
+        queryClient.prefetchQuery({
+          queryKey: ['twitter', 'getScheduled'],
+          staleTime: 30 * 1000
+        })
+      }
+      
+      // If user is on scheduled, warm posted cache
+      if (window.location.pathname.includes('/scheduled')) {
+        queryClient.prefetchInfiniteQuery({
+          queryKey: ['twitter', 'getPosted', { limit: 20 }],
+          staleTime: 5 * 60 * 1000
+        })
+      }
+    } catch (error) {
+      console.warn('Failed to warm cache:', error)
     }
   }
 

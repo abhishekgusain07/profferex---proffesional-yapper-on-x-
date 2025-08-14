@@ -91,14 +91,14 @@ export function useTwitterDataOperations() {
   
   return {
     invalidateTwitterAccounts: () => {
-      queryClient.invalidateQueries(['twitter', 'getAccounts'])
-      queryClient.invalidateQueries(['twitter', 'getActiveAccount'])
+      queryClient.invalidateQueries({ queryKey: ['twitter', 'getAccounts'] })
+      queryClient.invalidateQueries({ queryKey: ['twitter', 'getActiveAccount'] })
     },
     optimisticallyUpdateActiveAccount: (newActiveAccount: any) => {
       queryClient.setQueryData(['twitter', 'getActiveAccount'], newActiveAccount)
     },
     invalidateAccountsOnly: () => {
-      queryClient.invalidateQueries(['twitter', 'getAccounts'])
+      queryClient.invalidateQueries({ queryKey: ['twitter', 'getAccounts'] })
     }
   }
 }
