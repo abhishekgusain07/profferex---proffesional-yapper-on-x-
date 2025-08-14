@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { ArrowLeftFromLine, ArrowRightFromLine, PanelLeft, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { usePrefetchOnHover } from '@/lib/prefetch-utils'
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +25,7 @@ export const LeftSidebar = () => {
   const pathname = usePathname()
   const isCollapsed = state === 'collapsed'
   const { toggleSidebar } = useSidebar()
+  const { prefetchPostedTweets, prefetchScheduledTweets } = usePrefetchOnHover()
 
   return (
     <Sidebar collapsible="icon" side="left" className="border-r border-border/40">
@@ -112,6 +114,7 @@ export const LeftSidebar = () => {
             <div className="flex flex-col gap-1">
               <Link
                 href="/studio/scheduled"
+                onMouseEnter={prefetchScheduledTweets}
                 className={cn(
                   buttonVariants({
                     variant: 'ghost',
@@ -136,6 +139,7 @@ export const LeftSidebar = () => {
 
               <Link
                 href="/studio/posted"
+                onMouseEnter={prefetchPostedTweets}
                 className={cn(
                   buttonVariants({
                     variant: 'ghost',

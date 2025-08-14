@@ -3,6 +3,7 @@
 import { createContext, PropsWithChildren, useContext, useEffect } from 'react'
 import { trpc } from '@/trpc/client'
 import { useQueryClient } from '@tanstack/react-query'
+import { useBackgroundRefresh, warmNavCache } from '@/lib/prefetch-utils'
 
 interface TwitterDataProviderProps extends PropsWithChildren {
   initialTwitterData?: {
@@ -23,6 +24,10 @@ const TwitterDataContext = createContext<{
 
 export function TwitterDataProvider({ children, initialTwitterData }: TwitterDataProviderProps) {
   const queryClient = useQueryClient()
+  
+  // Enable background refresh and cache warming
+  useBackgroundRefresh()
+  warmNavCache()
   
   // Use tRPC hooks with smart caching - stale-while-revalidate pattern
   const { data: accounts, isLoading: accountsLoading } = trpc.twitter.getAccounts.useQuery(
