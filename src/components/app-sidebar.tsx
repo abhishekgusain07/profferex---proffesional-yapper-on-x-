@@ -274,7 +274,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   const handleChatSelect = async (chatId: string) => {
     setIsHistoryOpen(false)
-    setId(chatId)
+    await setId(chatId)
+    updateURL('chatId', chatId)
   }
 
   return (
