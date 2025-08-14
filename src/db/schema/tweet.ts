@@ -6,6 +6,7 @@ import {
   boolean,
   integer,
   bigint,
+  index,
 } from 'drizzle-orm/pg-core'
 import { account, user } from './auth'
 import { InferSelectModel } from 'drizzle-orm'
@@ -39,7 +40,13 @@ export const tweets = pgTable('tweets', {
   isPublished: boolean('is_published').default(false).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  userPublishedIdx: index('idx_tweets_user_published').on(table.userId, table.isPublished, table.createdAt),
+  userScheduledIdx: index('idx_tweets_user_scheduled').on(table.userId, table.isScheduled, table.scheduledFor),
+  accountPublishedIdx: index('idx_tweets_account_published').on(table.accountId, table.isPublished, table.createdAt),
+  userAccountPublishedIdx: index('idx_tweets_user_account_published').on(table.userId, table.accountId, table.isPublished, table.createdAt),
+  scheduledOrderIdx: index('idx_tweets_scheduled_order').on(table.isScheduled, table.scheduledFor),
+}))
 
 export type Tweet = InferSelectModel<typeof tweets>
 export type TweetQuery = InferSelectModel<typeof tweets>

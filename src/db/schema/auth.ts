@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, json } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, boolean, integer, json, index } from 'drizzle-orm/pg-core'
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -47,7 +47,10 @@ export const account = pgTable('account', {
   password: text("password"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
-})
+}, (table) => ({
+  userProviderIdx: index('idx_account_user_provider').on(table.userId, table.providerId),
+  userProviderActiveIdx: index('idx_account_user_provider_active').on(table.userId, table.providerId, table.accountId),
+}))
 
 export const verification = pgTable('verification', {
   id: text('id').primaryKey(),

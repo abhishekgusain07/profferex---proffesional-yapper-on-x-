@@ -8,8 +8,6 @@ interface TwitterDataProviderProps extends PropsWithChildren {
   initialTwitterData?: {
     accounts?: any[] | null
     activeAccount?: any | null
-    posted?: any | null
-    scheduled?: any[] | null
   } | null
 }
 
@@ -50,16 +48,6 @@ export function TwitterDataProvider({ children, initialTwitterData }: TwitterDat
     }
     if (initialTwitterData?.activeAccount) {
       queryClient.setQueryData(['twitter', 'getActiveAccount'], initialTwitterData.activeAccount)
-    }
-    if (initialTwitterData?.posted) {
-      // Infinite query hydration: store as one page
-      queryClient.setQueryData(['twitter', 'getPosted', { limit: 20 }], {
-        pages: [initialTwitterData.posted],
-        pageParams: [undefined],
-      })
-    }
-    if (initialTwitterData?.scheduled) {
-      queryClient.setQueryData(['twitter', 'getScheduled'], initialTwitterData.scheduled)
     }
   }, [initialTwitterData, queryClient])
 

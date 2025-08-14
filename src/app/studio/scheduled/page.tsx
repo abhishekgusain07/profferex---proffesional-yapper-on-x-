@@ -6,18 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Clock, Trash2, Edit, Calendar as CalendarIcon, Image as ImageIcon } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 
 const ScheduledPage = () => {
   const { data: session, isPending: sessionLoading } = useSession()
-  const queryClient = useQueryClient()
-
-  const initialScheduled = queryClient.getQueryData(['twitter', 'getScheduled']) as any[] | undefined
-
   const { data: scheduledTweets, refetch: refetchScheduled, isLoading: scheduledLoading } = trpc.twitter.getScheduled.useQuery(
     undefined,
-    { enabled: !!session, initialData: initialScheduled }
+    { enabled: !!session }
   )
 
   const cancelScheduled = trpc.twitter.cancelScheduled.useMutation({

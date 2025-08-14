@@ -56,12 +56,6 @@ const PostedPage = () => {
     ...searchFilters
   }), [searchQuery, searchFilters])
 
-  const initialPosted = queryClient.getQueryData([
-    'twitter',
-    'getPosted',
-    { limit: 20 },
-  ]) as { pages: any[]; pageParams: any[] } | undefined
-
   const { 
     data: postedData, 
     isLoading: postsLoading,
@@ -73,10 +67,6 @@ const PostedPage = () => {
     { 
       enabled: !!session,
       getNextPageParam: (lastPage) => lastPage.nextCursor,
-      // Hydrate if we have initial server data with the same base key
-      initialData: queryInput.search || queryInput.accountId || queryInput.sortBy
-        ? undefined
-        : initialPosted,
     }
   )
 
