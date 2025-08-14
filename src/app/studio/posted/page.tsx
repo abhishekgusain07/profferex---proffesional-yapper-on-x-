@@ -67,6 +67,9 @@ const PostedPage = () => {
     { 
       enabled: !!session,
       getNextPageParam: (lastPage) => lastPage.nextCursor,
+      staleTime: 5 * 60 * 1000, // Consider fresh for 5 minutes
+      cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+      refetchOnWindowFocus: false, // Don't auto-refresh on focus for historical data
     }
   )
 

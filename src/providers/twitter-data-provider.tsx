@@ -24,12 +24,16 @@ const TwitterDataContext = createContext<{
 export function TwitterDataProvider({ children, initialTwitterData }: TwitterDataProviderProps) {
   const queryClient = useQueryClient()
   
-  // Use tRPC hooks to get current data
+  // Use tRPC hooks with smart caching - stale-while-revalidate pattern
   const { data: accounts, isLoading: accountsLoading } = trpc.twitter.getAccounts.useQuery(
     undefined,
     { 
       initialData: initialTwitterData?.accounts,
-      staleTime: 30 * 1000, // Consider fresh for 30 seconds
+      staleTime: 5 * 60 * 1000, // Consider fresh for 5 minutes
+      cacheTime: 60 * 60 * 1000, // Keep in cache for 1 hour
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
     }
   )
   
@@ -37,7 +41,11 @@ export function TwitterDataProvider({ children, initialTwitterData }: TwitterDat
     undefined,
     {
       initialData: initialTwitterData?.activeAccount,
-      staleTime: 30 * 1000, // Consider fresh for 30 seconds
+      staleTime: 2 * 60 * 1000, // Consider fresh for 2 minutes
+      cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+      refetchOnWindowFocus: true, // Refresh active account on focus for real-time updates
+      refetchOnMount: false,
+      refetchOnReconnect: true,
     }
   )
 

@@ -46,6 +46,11 @@ export const tweets = pgTable('tweets', {
   accountPublishedIdx: index('idx_tweets_account_published').on(table.accountId, table.isPublished, table.createdAt),
   userAccountPublishedIdx: index('idx_tweets_user_account_published').on(table.userId, table.accountId, table.isPublished, table.createdAt),
   scheduledOrderIdx: index('idx_tweets_scheduled_order').on(table.isScheduled, table.scheduledFor),
+  // Additional composite indexes for complex queries
+  userPublishedCreatedIdx: index('idx_tweets_user_published_created').on(table.userId, table.isPublished, table.createdAt),
+  accountIdPublishedIdx: index('idx_tweets_accountid_published').on(table.accountId, table.isPublished),
+  userScheduledUnixIdx: index('idx_tweets_user_scheduled_unix').on(table.userId, table.isScheduled, table.scheduledUnix),
+  twitterIdIdx: index('idx_tweets_twitter_id').on(table.twitterId),
 }))
 
 export type Tweet = InferSelectModel<typeof tweets>

@@ -12,7 +12,13 @@ const ScheduledPage = () => {
   const { data: session, isPending: sessionLoading } = useSession()
   const { data: scheduledTweets, refetch: refetchScheduled, isLoading: scheduledLoading } = trpc.twitter.getScheduled.useQuery(
     undefined,
-    { enabled: !!session }
+    { 
+      enabled: !!session,
+      staleTime: 30 * 1000, // Consider fresh for 30 seconds (dynamic data)
+      cacheTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+      refetchOnWindowFocus: true, // Refresh on focus for real-time updates
+      refetchInterval: 60 * 1000, // Auto-refresh every minute for scheduled tweets
+    }
   )
 
   const cancelScheduled = trpc.twitter.cancelScheduled.useMutation({

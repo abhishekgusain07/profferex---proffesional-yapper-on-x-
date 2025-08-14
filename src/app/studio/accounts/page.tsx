@@ -60,15 +60,26 @@ const AccountsPage = () => {
   const [prompt, setPrompt] = useState('')
   const [isStyleSettingsOpen, setIsStyleSettingsOpen] = useState(false)
 
-  // Use tRPC queries with initial data for operations that need refetch
+  // Use tRPC queries with optimized caching for operations that need refetch
   const twitterAccountsQuery = trpc.twitter.getAccounts.useQuery(
     undefined,
-    { enabled: !!session, initialData: twitterAccounts }
+    { 
+      enabled: !!session, 
+      initialData: twitterAccounts,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      cacheTime: 60 * 60 * 1000, // 1 hour
+    }
   )
 
   const activeAccountQuery = trpc.twitter.getActiveAccount.useQuery(
     undefined,
-    { enabled: !!session, initialData: activeAccount }
+    { 
+      enabled: !!session, 
+      initialData: activeAccount,
+      staleTime: 2 * 60 * 1000, // 2 minutes
+      cacheTime: 30 * 60 * 1000, // 30 minutes
+      refetchOnWindowFocus: true,
+    }
   )
 
   // Maintain compatibility with existing code
