@@ -398,6 +398,69 @@ export default function PostedPage() {
 
 ---
 
+## Common Performance Issues & Solutions
+
+### Issue: Persistent Loading Spinners (Dual Session Loading)
+
+#### Problem
+Components using direct session hooks while server-side session exists creates dual loading states, causing persistent spinners.
+
+#### Example of the Problem
+```tsx
+// ❌ BAD - Creates dual loading states
+function Navbar() {
+  const { data: session, isPending } = useSession() // Client-side loading
+  // Server already loaded session, but this hook still shows loading
+  
+  return (
+    <button disabled={isPending}>
+      {isPending ? <Spinner /> : 'Get Started'}
+    </button>
+  )
+}
+```
+
+#### Solution Pattern
+```tsx
+// ✅ GOOD - Use unified session context
+function Navbar() {
+  const { session, isLoading } = useSessionContext() // Uses pre-loaded session
+  
+  return (
+    <button disabled={isLoading}>
+      {isLoading ? <Spinner /> : 'Get Started'}
+    </button>
+  )
+}
+```
+
+#### Implementation Steps
+1. **Create Session Context Provider** (if not exists)
+2. **Pre-load session server-side** in layout
+3. **Replace direct session hooks** with context hooks
+4. **Hydrate React Query cache** with server session
+
+```tsx
+// Provider setup
+export function SessionProvider({ children, initialSession }) {
+  const { data: session, isLoading } = useSession()
+  
+  return (
+    <SessionContext.Provider 
+      value={{ 
+        session: session || initialSession, 
+        isLoading: isLoading && !initialSession 
+      }}
+    >
+      {children}
+    </SessionContext.Provider>
+  )
+}
+
+// Usage in components
+const { session, isLoading } = useSessionContext() // ✅ Fast, unified state
+```
+
 ## Performance Monitoring
 
 ### Key Metrics to Track
@@ -464,6 +527,7 @@ Route (app)                    Size     First Load JS
 - [ ] Implement prefetch on navigation hover
 - [ ] Add database indexes for new queries
 - [ ] Use React Query v4 syntax for cache operations
+- [ ] Use unified session context (avoid dual loading states)
 - [ ] Monitor performance with build analysis
 
 ### ✅ Cache Strategy by Data Type
