@@ -272,8 +272,14 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     [addChatAttachment],
   )
 
+  const utils = trpc.useUtils()
+
   const handleChatSelect = async (chatId: string) => {
     setIsHistoryOpen(false)
+    
+    // Invalidate the current chat messages query to ensure fresh data
+    await utils.chat.get_message_history.invalidate()
+    
     await setId(chatId)
     updateURL('chatId', chatId)
   }

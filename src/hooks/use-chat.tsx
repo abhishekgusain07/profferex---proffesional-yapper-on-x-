@@ -52,16 +52,20 @@ export function ChatProvider({ children }: PropsWithChildren) {
   const { data } = trpc.chat.get_message_history.useQuery(
     { chatId: id },
     {
-      initialData: { messages: [] },
+      enabled: !!id && id !== defaultValue,
       refetchOnWindowFocus: false,
+      staleTime: 1000 * 60 * 5, // 5 minutes
     }
   )
 
   useEffect(() => {
     if (data?.messages) {
       chat.setMessages(data.messages as never[])
+    } else if (id === defaultValue) {
+      // Reset to empty messages when on default/new chat
+      chat.setMessages([])
     }
-  }, [data, chat.setMessages])
+  }, [data, chat.setMessages, id, defaultValue])
 
   const contextValue = useMemo(() => ({ 
     ...chat, 
