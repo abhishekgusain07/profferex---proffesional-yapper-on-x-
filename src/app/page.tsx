@@ -7,6 +7,7 @@ import { signOut } from '@/lib/auth-client'
 import Link from 'next/link'
 import Script from 'next/script'
 import YCButtonLight from '@/components/notycomb'
+import { Spotlight } from '@/components/ui/spotlight-new'
 
 const Page = () => {
   const { session } = useSessionContext()
@@ -25,13 +26,20 @@ const Page = () => {
         {/* Navigation */}
         <div className="relative z-10">
           <div className="max-w-7xl mx-auto">
-            <Navbar title={session ? 'Studio' : 'Get Started'} />
+            <Navbar title={session ? 'Studio' : 'Login'} />
           </div>
         </div>
 
-        {/* Hero Section */}
-        <div className="relative z-10 pt-20 pb-32">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        {/* Hero Section with Spotlight */}
+        <div className="relative min-h-[40rem] flex items-center justify-center overflow-hidden">
+          {/* Spotlight effect - emerald/sky blue theme with higher visibility */}
+          <Spotlight 
+            gradientFirst="radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(160, 100%, 75%, .35) 0, hsla(200, 100%, 70%, .20) 50%, hsla(180, 100%, 60%, 0) 80%)"
+            gradientSecond="radial-gradient(50% 50% at 50% 50%, hsla(165, 100%, 80%, .25) 0, hsla(195, 100%, 75%, .15) 80%, transparent 100%)"
+            gradientThird="radial-gradient(50% 50% at 50% 50%, hsla(170, 100%, 85%, .20) 0, hsla(190, 100%, 80%, .10) 80%, transparent 100%)"
+          />
+          
+          <div className="relative z-20 max-w-7xl mx-auto px-6 lg:px-8 pt-20 pb-32">
             <div className="max-w-5xl mx-auto">
               {/* Hero Content */}
               <div className="text-center space-y-12">
@@ -40,14 +48,14 @@ const Page = () => {
                   <span className="text-sm font-medium text-indigo-600">✨ AI-Powered Content Engine</span>
                 </div>
 
-                {/* Main Heading */}
+                {/* Main Heading with Spotlight effect */}
                 <div className="space-y-6">
                   <h1 className="text-6xl sm:text-7xl lg:text-8xl font-bold tracking-tight">
                     <span className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-600 bg-clip-text text-transparent">
                       Grow your
                     </span>
                     <br />
-                    <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-sky-500 bg-clip-text text-transparent">
                       Twitter presence
                     </span>
                   </h1>
@@ -58,38 +66,6 @@ const Page = () => {
                   </p>
                 </div>
 
-                {/* Feature Points */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                  <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20 shadow-lg">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mb-4 mx-auto">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </div>
-                    <h3 className="font-semibold text-slate-800 text-lg mb-2">AI Writing Assistant</h3>
-                    <p className="text-slate-600 text-sm">Transform ideas into engaging tweets with AI-powered content generation</p>
-                  </div>
-                  
-                  <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20 shadow-lg">
-                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center mb-4 mx-auto">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <h3 className="font-semibold text-slate-800 text-lg mb-2">Smart Scheduling</h3>
-                    <p className="text-slate-600 text-sm">Schedule weeks of content in advance with optimal timing suggestions</p>
-                  </div>
-                  
-                  <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20 shadow-lg">
-                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center mb-4 mx-auto">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
-                    <h3 className="font-semibold text-slate-800 text-lg mb-2">Analytics & Growth</h3>
-                    <p className="text-slate-600 text-sm">Track performance and optimize your content strategy for maximum reach</p>
-                  </div>
-                </div>
 
                 {/* CTA Section */}
                 <div className="space-y-8">
@@ -112,7 +88,7 @@ const Page = () => {
                     )}
                   </div>
 
-                  {/* Social Proof */}
+                  {/* Social Proof - moved inside the spotlight section */}
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-6 bg-white/40 backdrop-blur-sm rounded-2xl p-6 border border-white/30 shadow-lg max-w-lg mx-auto">
                     <div className="flex -space-x-3">
                       <img
@@ -165,22 +141,6 @@ const Page = () => {
           </div>
         </div>
 
-        {/* Testimonials Section */}
-        <div className="relative z-10 pb-20">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <Script
-              src="https://widget.senja.io/widget/72519276-9e16-4bc4-9911-49ffb12b73b4/platform.js"
-              type="text/javascript"
-              async
-            />
-            <div
-              className="senja-embed block w-full"
-              data-id="72519276-9e16-4bc4-9911-49ffb12b73b4"
-              data-mode="shadow"
-              data-lazyload="false"
-            />
-          </div>
-        </div>
       </div>
     </>
   )

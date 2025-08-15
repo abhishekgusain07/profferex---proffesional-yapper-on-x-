@@ -4,7 +4,7 @@ import * as React from 'react'
 import { baseStyles, sizeStyles, variantStyles } from '@/components/ui/duolingo-button'
 import GitHubStarButton from '@/components/ui/github-star-button'
 import { cn } from '@/lib/utils'
-import { Menu, X, Loader2 } from 'lucide-react'
+import { Menu, X, Loader2, Router } from 'lucide-react'
 import Link from 'next/link'
 import { Icons } from './icons'
 import { GITHUB_REPO } from '@/app/constants/misc'
@@ -45,13 +45,6 @@ const ActionButtons = ({
 
   return (
     <div className={cn('flex gap-2 items-center', className)}>
-      <GitHubStarButton
-        className={cn(
-          'whitespace-nowrap',
-          className?.includes('w-full') && 'w-full justify-center',
-        )}
-        repo={GITHUB_REPO}
-      />
       {isLoading ? (
         <button
           className={cn(
@@ -75,6 +68,7 @@ const ActionButtons = ({
             variantStyles.primary,
             sizeStyles.sm,
             className?.includes('w-full') && 'w-full justify-center',
+            'cursor-pointer hover:opacity-90 transition-opacity',
             isLoggingOut && 'cursor-not-allowed opacity-80'
           )}
           onClick={handleLogout}
@@ -96,6 +90,7 @@ const ActionButtons = ({
             variantStyles.primary,
             sizeStyles.sm,
             className?.includes('w-full') && 'w-full justify-center',
+            'cursor-pointer hover:opacity-90 transition-opacity'
           )}
           href={title === 'Studio' ? '/studio' : '/login'}
           onClick={onLinkClick}
