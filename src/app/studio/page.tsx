@@ -65,14 +65,14 @@ const Studio = () => {
   // Use the traditional tRPC refetch functions for operations that need them
   const twitterAccountsQuery = trpc.twitter.getAccounts.useQuery(
     undefined,
-    { enabled: !!session, initialData: twitterAccounts }
+    { enabled: !!session, initialData: twitterAccounts || [] }
   )
   
   const activeAccountQuery = trpc.twitter.getActiveAccount.useQuery(
     undefined,
     { 
       enabled: !!session,
-      initialData: activeAccount,
+      initialData: activeAccount || undefined,
       refetchOnWindowFocus: true,
       refetchOnMount: true,
       staleTime: 0,
@@ -338,7 +338,6 @@ const Studio = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100/80 py-8 px-4">
       <div className="max-w-xl w-full mx-auto">
-      {/* ContentPort-style Tweet Editor Card */}
       <div className="relative bg-white p-6 rounded-2xl w-full border border-stone-200 bg-clip-padding group isolate shadow-[0_1px_1px_rgba(0,0,0,0.05),0_4px_6px_rgba(34,42,53,0.04),0_24px_68px_rgba(47,48,55,0.05),0_2px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_2px_2px_rgba(0,0,0,0.06),0_6px_10px_rgba(34,42,53,0.05),0_28px_72px_rgba(47,48,55,0.06),0_3px_4px_rgba(0,0,0,0.05)]">
         <div className="flex gap-3 relative z-10">
           {/* Profile Avatar */}
