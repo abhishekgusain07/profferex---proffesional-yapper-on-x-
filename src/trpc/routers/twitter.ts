@@ -871,13 +871,19 @@ export const twitterRouter = createTRPCRouter({
         throw new Error('Scheduled tweet not found')
       }
 
-      // Cancel QStash job
+      // Cancel QStash job (but don't fail if this fails)
       if (existingTweet.qstashId) {
         try {
           await qstash.messages.delete(existingTweet.qstashId)
+          console.log('✅ Successfully cancelled QStash job:', existingTweet.qstashId)
         } catch (err) {
-          console.error('Failed to cancel QStash job:', err)
-          throw new Error('Failed to cancel scheduled tweet')
+          console.error('⚠️ Failed to cancel QStash job (continuing with database deletion):', {
+            qstashId: existingTweet.qstashId,
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined
+          })
+          // Don't throw error - continue with database deletion
+          // The job might have already been processed or the QStash service might be temporarily unavailable
         }
       }
 

@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { trpc } from '@/trpc/client'
 import { useSession } from '@/lib/auth-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Loader2, Clock, Trash2, Edit, Calendar as CalendarIcon, Image as ImageIcon } from 'lucide-react'
 import { format } from 'date-fns'
 import ScheduledTweetSkeleton from '@/components/scheduled-tweet-skeleton'
@@ -22,11 +24,55 @@ const ScheduledPage = () => {
     }
   )
 
+  const utils = trpc.useUtils()
+  
   const cancelScheduled = trpc.twitter.cancelScheduled.useMutation({
-    onSuccess: () => {
-      refetchScheduled()
+    onMutate: async ({ tweetId }) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await utils.twitter.getScheduled.cancel()
+
+      // Snapshot the previous value
+      const previousScheduled = utils.twitter.getScheduled.getData()
+
+      // Optimistically update to the new value
+      utils.twitter.getScheduled.setData(undefined, (old) => {
+        if (!old) return old
+        return old.filter((tweet) => tweet.id !== tweetId)
+      })
+
+      // Return a context object with the snapshotted value
+      return { previousScheduled }
+    },
+    onError: (err, { tweetId }, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      utils.twitter.getScheduled.setData(undefined, context?.previousScheduled)
+    },
+    onSettled: () => {
+      // Always refetch after error or success to sync with server state
+      utils.twitter.getScheduled.invalidate()
     },
   })
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [tweetToDelete, setTweetToDelete] = useState<string | null>(null)
+
+  const handleDeleteClick = (tweetId: string) => {
+    setTweetToDelete(tweetId)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = () => {
+    if (tweetToDelete) {
+      cancelScheduled.mutate({ tweetId: tweetToDelete })
+      setDeleteDialogOpen(false)
+      setTweetToDelete(null)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setDeleteDialogOpen(false)
+    setTweetToDelete(null)
+  }
 
   if (sessionLoading) {
     return (
@@ -176,7 +222,7 @@ const ScheduledPage = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => cancelScheduled.mutate({ tweetId: tweet.id })}
+                          onClick={() => handleDeleteClick(tweet.id)}
                           disabled={cancelScheduled.isPending}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
@@ -206,6 +252,37 @@ const ScheduledPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Scheduled Tweet</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this scheduled tweet? This action cannot be undone and the tweet will not be posted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleCancelDelete}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDelete}
+              disabled={cancelScheduled.isPending}
+            >
+              {cancelScheduled.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Tweet'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
