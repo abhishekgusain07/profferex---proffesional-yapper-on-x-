@@ -23,7 +23,23 @@ export const chatMessages = pgTable("chat_messages", {
     .references(() => user.id, { onDelete: "cascade" }),
   role: varchar("role", { enum: ["user", "assistant", "system"] }).notNull(),
   content: text("content").notNull(),
-  metadata: json("metadata"),
+  metadata: json("metadata").$type<{
+    userMessage?: string
+    editorContent?: string
+    attachments?: Array<{
+      id: string
+      title?: string
+      type: string
+      variant: string
+      fileKey?: string
+      content?: string
+    }>
+    tweets?: Array<{
+      id: string
+      content: string
+      index: number
+    }>
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 })
 

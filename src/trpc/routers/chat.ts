@@ -7,8 +7,22 @@ import { TRPCError } from '@trpc/server'
 import { nanoid } from 'nanoid'
 import { Ratelimit } from '@upstash/ratelimit'
 import { eq, desc, and } from 'drizzle-orm'
+import {
+  convertToModelMessages,
+  createIdGenerator,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  smoothStream,
+  stepCountIs,
+  streamText,
+  UIMessage,
+  generateId,
+} from 'ai'
+import { format } from 'date-fns'
+import { HTTPException } from 'hono/http-exception'
+import { createTweetTool } from './chat/tools/create-tweet-tool'
 
-// Types for the API (matching the open source pattern)
+// Types for the API (matching contentport pattern)
 export interface MyUIMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -17,7 +31,8 @@ export interface MyUIMessage {
     text?: string
     data?: {
       text: string
-      status: string
+      index: number
+      status: 'processing' | 'streaming' | 'complete'
     }
   }>
   metadata?: {
@@ -31,7 +46,56 @@ export interface MyUIMessage {
       fileKey?: string
       content?: string
     }>
+    tweets?: Array<{
+      id: string
+      content: string
+      index: number
+    }>
   }
+}
+
+export type Metadata = {
+  userMessage: string
+  attachments: Array<{
+    id: string
+    title?: string
+    type: string
+    variant: string
+    fileKey?: string
+    content?: string
+  }>
+  tweets?: Array<{
+    id: string
+    content: string
+    index: number
+  }>
+}
+
+export type TAttachment = {
+  id: string
+  title?: string
+  fileKey?: string
+  type: 'url' | 'txt' | 'docx' | 'pdf' | 'image' | 'manual' | 'video'
+  variant: 'knowledge' | 'chat'
+}
+
+export type MessageMetadata = {
+  attachments?: Array<TAttachment>
+}
+
+export type ChatMessage = {
+  id: string
+  chatId: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  metadata?: MessageMetadata
+}
+
+export interface WebScrapingResult {
+  url: string
+  content?: string
+  screenshot?: string
+  error?: string
 }
 
 export interface ChatHistoryItem {
@@ -86,6 +150,34 @@ async function updateChatHistoryList(userEmail: string, chatId: string, title: s
   await saveChatHistoryList(userEmail, updatedHistory.slice(0, 20)) // Keep only last 20 chats
 }
 
+// Parse attachments helper
+async function parseAttachments({
+  attachments,
+}: {
+  attachments?: Array<TAttachment>
+}) {
+  const links: Array<{ link: string }> = []
+  const parsedAttachments: Array<{ type: string; text?: string }> = []
+
+  if (!attachments) {
+    return { links, attachments: parsedAttachments }
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.type === 'url') {
+      links.push({ link: attachment.title || '' })
+    } else if (attachment.type === 'txt' && attachment.fileKey) {
+      // Handle text file content
+      parsedAttachments.push({
+        type: 'text',
+        text: attachment.title || '',
+      })
+    }
+  }
+
+  return { links, attachments: parsedAttachments }
+}
+
 export const chatRouter = createTRPCRouter({
   // Get message history for a specific chat
   get_message_history: protectedProcedure
@@ -112,6 +204,105 @@ export const chatRouter = createTRPCRouter({
       return {
         chatHistory: chatHistory.slice(0, 20), // Return last 20 chats
       }
+    }),
+
+  // Enhanced chat endpoint with streaming support
+  chat: protectedProcedure
+    .input(
+      z.object({
+        message: z.any(),
+        id: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { user } = ctx
+      const { id, message } = input as { message: MyUIMessage; id: string }
+
+      const limiter = new Ratelimit({ 
+        redis, 
+        limiter: Ratelimit.slidingWindow(80, '4h') 
+      })
+
+      const [history, parsedAttachments, limitResult] = await Promise.all([
+        getMessagesFromRedis(id),
+        parseAttachments({
+          attachments: message.metadata?.attachments,
+        }),
+        limiter.limit(user.email),
+      ])
+
+      if (process.env.NODE_ENV === 'production') {
+        const { success } = limitResult
+        if (!success) {
+          throw new TRPCError({
+            code: 'TOO_MANY_REQUESTS',
+            message: 'Rate limit exceeded. Please try again later.',
+          })
+        }
+      }
+
+      const { links, attachments } = parsedAttachments
+
+      // Build content for the AI
+      let content = ''
+      const userContent = message.parts.reduce(
+        (acc, curr) => (curr.type === 'text' ? acc + curr.text : ''),
+        '',
+      )
+
+      content += `<message date="${format(new Date(), 'EEEE, yyyy-MM-dd')}">`
+      content += `<user_message>${userContent}</user_message>`
+
+      if (Boolean(links.length)) {
+        content += '<attached_links>'
+        links.filter(Boolean).forEach((l) => {
+          content += `<link>${l.link}</link>`
+        })
+        content += '</attached_links>'
+      }
+
+      if (message.metadata?.tweets) {
+        if (message.metadata.tweets.length === 1) {
+          content += `<tweet_draft>${message.metadata.tweets[0]?.content}</tweet_draft>`
+        } else if (message.metadata.tweets.length > 1) {
+          content += '<thread_draft>'
+          message.metadata.tweets.forEach((tweet) => {
+            content += `<tweet_draft index="${tweet.index}">${tweet.content}</tweet_draft>`
+          })
+          content += '</thread_draft>'
+        }
+      }
+
+      content += '</message>'
+
+      const userMessage: MyUIMessage = {
+        ...message,
+        parts: [{ type: 'text', text: content }, ...attachments],
+      }
+
+      const messages = [...history, userMessage] as MyUIMessage[]
+
+      // For now, return a simple response structure
+      // This will be enhanced with actual AI streaming in the next phase
+      const responseMessage: MyUIMessage = {
+        id: generateId(),
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'I can help you with creating tweets and threads. This is a placeholder response that will be replaced with AI-powered content generation.',
+          },
+        ],
+      }
+
+      const updatedMessages = [...messages, responseMessage]
+      await saveMessagesToRedis(id, updatedMessages)
+
+      // Update chat history list
+      const title = messages[0]?.metadata?.userMessage ?? 'Unnamed chat'
+      await updateChatHistoryList(user.email, id, title)
+
+      return { success: true, messageId: responseMessage.id }
     }),
 
   // Get conversations (comprehensive list)
