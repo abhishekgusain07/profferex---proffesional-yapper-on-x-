@@ -30,9 +30,10 @@ export const Calendar20 = ({
   const currentHour = today.getHours()
   const currentMinute = today.getMinutes()
 
-  const timeSlots = Array.from({ length: 37 }, (_, i) => {
+  // Generate time slots from 6:00 AM to 11:30 PM (17.5 hours = 70 slots of 15 minutes)
+  const timeSlots = Array.from({ length: 70 }, (_, i) => {
     const totalMinutes = i * 15
-    const hour = Math.floor(totalMinutes / 60) + 9
+    const hour = Math.floor(totalMinutes / 60) + 6  // Start at 6 AM
     const minute = totalMinutes % 60
     return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
   })
@@ -45,10 +46,11 @@ export const Calendar20 = ({
         const hour = timeParts[0] ?? 0
         const minute = timeParts[1] ?? 0
         const slotTime = hour * 60 + minute
-        return slotTime > currentTime
+        // Require at least 30 minutes in the future
+        return slotTime >= currentTime + 30
       }) ??
       timeSlots[0] ??
-      '10:00'
+      '06:00'
     )
   }
 
@@ -82,7 +84,8 @@ export const Calendar20 = ({
     const slotTime = hour * 60 + minute
     const currentTime = currentHour * 60 + currentMinute
 
-    return slotTime <= currentTime
+    // Disable slots that are less than 30 minutes in the future
+    return slotTime < currentTime + 30
   }
 
   const isPastDate = (date: Date) => {
