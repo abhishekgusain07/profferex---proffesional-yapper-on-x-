@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils'
 interface AttachmentItemProps {
   attachment: Attachment
   index: number
+  onRemove?: () => void
 }
 
 // Get icon based on attachment type

@@ -52,6 +52,7 @@ import type { Attachment, ChatAttachment } from '@/types/chat'
 import { SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import * as SheetPrimitive from '@radix-ui/react-dialog'
+import PlaceholderPlugin from './ui/placeholder-plugin'
 
 const ChatInput2 = ({
   onSubmit,
@@ -201,7 +202,9 @@ const ChatInput2 = ({
               transition={{ duration: 0.2, delay: i * 0.1 }}
             >
               <AttachmentItem
-                attachment={attachment as Attachment | ChatAttachment}
+                onRemove={onRemove}
+                key={attachment.id}
+                attachment={attachment}
                 index={i}
               />
             </motion.div>
@@ -243,9 +246,9 @@ const ChatInput2 = ({
                     onPaste={handlePaste}
                   />
                 }
-                placeholder={<div className="absolute top-3 left-4 text-gray-400 pointer-events-none">Tweet about...</div>}
                 ErrorBoundary={LexicalErrorBoundary}
               />
+              <PlaceholderPlugin placeholder="Tweet about..." />
               <HistoryPlugin />
 
               <div className="flex items-center justify-between px-3 pb-3">
@@ -287,162 +290,163 @@ const ChatInput2 = ({
     </div>
   )
 }
-const ChatInput = ({
-  onSubmit,
-  onStop,
-  disabled,
-  handleFilesAdded,
-}: {
-  onSubmit: (text: string) => void
-  onStop: () => void
-  disabled: boolean
-  handleFilesAdded: (files: File[]) => void
-}) => {
-  const [message, setMessage] = useState('')
-  const { isDragging } = useContext(FileUploadContext)
+// const ChatInput = ({
+//   onSubmit,
+//   onStop,
+//   disabled,
+//   handleFilesAdded,
+// }: {
+//   onSubmit: (text: string) => void
+//   onStop: () => void
+//   disabled: boolean
+//   handleFilesAdded: (files: File[]) => void
+// }) => {
+//   const [message, setMessage] = useState('')
+//   const { isDragging } = useContext(FileUploadContext)
 
-  const { attachments, removeAttachment, addKnowledgeAttachment, hasUploading } =
-    useAttachments()
+//   const { attachments, removeAttachment, addKnowledgeAttachment, hasUploading } =
+//     useAttachments()
 
-  const handleSubmit = () => {
-    if (!message.trim()) return
-    onSubmit(message.trim())
-    setMessage('')
-  }
+//   const handleSubmit = () => {
+//     if (!message.trim()) return
+//     onSubmit(message.trim())
+//     setMessage('')
+//   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit()
-    }
-  }
+//   const handleKeyPress = (e: React.KeyboardEvent) => {
+//     if (e.key === 'Enter' && !e.shiftKey) {
+//       e.preventDefault()
+//       handleSubmit()
+//     }
+//   }
 
-  const handleAddKnowledgeDoc = useCallback(
-    (doc: SelectedKnowledgeDocument) => {
-      addKnowledgeAttachment(doc)
-    },
-    [addKnowledgeAttachment],
-  )
+//   const handleAddKnowledgeDoc = useCallback(
+//     (doc: SelectedKnowledgeDocument) => {
+//       addKnowledgeAttachment(doc)
+//     },
+//     [addKnowledgeAttachment],
+//   )
 
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      const items = e.clipboardData?.items
-      if (!items) return
+//   const handlePaste = useCallback(
+//     (e: React.ClipboardEvent) => {
+//       const items = e.clipboardData?.items
+//       if (!items) return
 
-      const files: File[] = []
-      Array.from(items).forEach((item) => {
-        if (item.kind === 'file') {
-          const file = item.getAsFile()
-          if (file) {
-            files.push(file)
-          }
-        }
-      })
+//       const files: File[] = []
+//       Array.from(items).forEach((item) => {
+//         if (item.kind === 'file') {
+//           const file = item.getAsFile()
+//           if (file) {
+//             files.push(file)
+//           }
+//         }
+//       })
 
-      if (files.length > 0) {
-        e.preventDefault()
-        handleFilesAdded(files)
-      }
-    },
-    [handleFilesAdded],
-  )
+//       if (files.length > 0) {
+//         e.preventDefault()
+//         handleFilesAdded(files)
+//       }
+//     },
+//     [handleFilesAdded],
+//   )
 
-  return (
-    <div>
-      <div className="mb-2 flex gap-2 items-center">
-        {attachments.map((attachment, i) => {
-          const onRemove = () => removeAttachment({ id: attachment.id })
-          return (
-            <motion.div
-              key={attachment.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.2, delay: i * 0.1 }}
-            >
-              <AttachmentItem
-                attachment={attachment as Attachment | ChatAttachment}
-                index={i}
-              />
-            </motion.div>
-          )
-        })}
-      </div>
+//   return (
+//     <div>
+//       <div className="mb-2 flex gap-2 items-center">
+//         {attachments.map((attachment, i) => {
+//           const onRemove = () => removeAttachment({ id: attachment.id })
+//           return (
+//             <motion.div
+//               key={attachment.id}
+//               initial={{ opacity: 0, y: 10 }}
+//               animate={{ opacity: 1, y: 0 }}
+//               exit={{ opacity: 0, y: 10 }}
+//               transition={{ duration: 0.2, delay: i * 0.1 }}
+//             >
+//               <AttachmentItem
+//                 onRemove={onRemove}
+//                 key={attachment.id}
+//                 attachment={attachment}
+//               />
+//             </motion.div>
+//           )
+//         })}
+//       </div>
 
-      <div className="space-y-3">
-        <div
-          className={`relative transition-all rounded-xl duration-300 ease-out ${
-            isDragging ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-gray-100' : ''
-          }`}
-        >
-          {isDragging && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/90 to-blue-50/90 backdrop-blur-md rounded-xl z-20 border-2 border-dashed border-indigo-300">
-              <div className="flex items-center gap-2 text-indigo-700">
-                <Paperclip className="size-5" />
-                <p className="font-medium">Drop files to attach</p>
-              </div>
-              <p className="text-sm text-indigo-500 mt-1">
-                Supports images, documents, and more
-              </p>
-            </div>
-          )}
-          <div className="relative">
-            <div
-              className={`rounded-xl bg-white border-2 shadow-[0_2px_0_#E5E7EB] font-medium transition-all duration-300 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-600 ${
-                isDragging
-                  ? 'border-indigo-200 shadow-[0_4px_12px_rgba(99,102,241,0.15)]'
-                  : 'border-gray-200'
-              }`}
-            >
-              <Input
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={handleKeyPress}
-                onPaste={handlePaste}
-                placeholder="Tweet about..."
-                className="w-full px-4 py-3 outline-none min-h-[4.5rem] text-base border-0 bg-transparent resize-none focus:ring-0 focus:outline-none"
-                disabled={disabled}
-              />
+//       <div className="space-y-3">
+//         <div
+//           className={`relative transition-all rounded-xl duration-300 ease-out ${
+//             isDragging ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-gray-100' : ''
+//           }`}
+//         >
+//           {isDragging && (
+//             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/90 to-blue-50/90 backdrop-blur-md rounded-xl z-20 border-2 border-dashed border-indigo-300">
+//               <div className="flex items-center gap-2 text-indigo-700">
+//                 <Paperclip className="size-5" />
+//                 <p className="font-medium">Drop files to attach</p>
+//               </div>
+//               <p className="text-sm text-indigo-500 mt-1">
+//                 Supports images, documents, and more
+//               </p>
+//             </div>
+//           )}
+//           <div className="relative">
+//             <div
+//               className={`rounded-xl bg-white border-2 shadow-[0_2px_0_#E5E7EB] font-medium transition-all duration-300 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-600 ${
+//                 isDragging
+//                   ? 'border-indigo-200 shadow-[0_4px_12px_rgba(99,102,241,0.15)]'
+//                   : 'border-gray-200'
+//               }`}
+//             >
+//               <Input
+//                 value={message}
+//                 onChange={(e) => setMessage(e.target.value)}
+//                 onKeyDown={handleKeyPress}
+//                 onPaste={handlePaste}
+//                 placeholder="Tweet about..."
+//                 className="w-full px-4 py-3 outline-none min-h-[4.5rem] text-base border-0 bg-transparent resize-none focus:ring-0 focus:outline-none"
+//                 disabled={disabled}
+//               />
 
-              <div className="flex items-center justify-between px-3 pb-3 mt-2">
-                <div className="flex gap-1.5 items-center">
-                  <FileUploadTrigger asChild>
-                    <Button type="button" variant="secondary" size="icon">
-                      <Paperclip className="text-stone-600 size-5" />
-                    </Button>
-                  </FileUploadTrigger>
+//               <div className="flex items-center justify-between px-3 pb-3 mt-2">
+//                 <div className="flex gap-1.5 items-center">
+//                   <FileUploadTrigger asChild>
+//                     <Button type="button" variant="secondary" size="icon">
+//                       <Paperclip className="text-stone-600 size-5" />
+//                     </Button>
+//                   </FileUploadTrigger>
 
-                  <KnowledgeSelector onSelectDocument={handleAddKnowledgeDoc} />
-                </div>
+//                   <KnowledgeSelector onSelectDocument={handleAddKnowledgeDoc} />
+//                 </div>
 
-                {disabled ? (
-                  <Button
-                    onClick={onStop}
-                    variant="default"
-                    size="icon"
-                    aria-label="Stop message"
-                  >
-                    <Square className="size-3 fill-white" />
-                  </Button>
-                ) : (
-                  <Button
-                    disabled={hasUploading || !message.trim()}
-                    onClick={handleSubmit}
-                    variant="default"
-                    size="icon"
-                    aria-label="Send message"
-                  >
-                    <ArrowUp className="size-5" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+//                 {disabled ? (
+//                   <Button
+//                     onClick={onStop}
+//                     variant="default"
+//                     size="icon"
+//                     aria-label="Stop message"
+//                   >
+//                     <Square className="size-3 fill-white" />
+//                   </Button>
+//                 ) : (
+//                   <Button
+//                     disabled={hasUploading || !message.trim()}
+//                     onClick={handleSubmit}
+//                     variant="default"
+//                     size="icon"
+//                     aria-label="Send message"
+//                   >
+//                     <ArrowUp className="size-5" />
+//                   </Button>
+//                 )}
+//               </div>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   )
+// }
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const { toggleSidebar } = useSidebar()
