@@ -85,7 +85,7 @@ export function KnowledgeSelector({ onSelectDocument, className }: KnowledgeSele
           className={cn('text-stone-600', className)}
           type="button"
         >
-          <Brain className="size-5" />
+          <span className="text-lg">🧠</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent 
