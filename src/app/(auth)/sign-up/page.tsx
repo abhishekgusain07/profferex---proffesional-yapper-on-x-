@@ -42,7 +42,7 @@ export default function SignUp() {
           email: formData.email,
           password: formData.password,
           name: formData.name,
-          callbackURL: "/dashboard",
+          callbackURL: "/studio",
         },
         {
           onRequest: () => {
@@ -50,7 +50,7 @@ export default function SignUp() {
           },
           onSuccess: () => {
             toast.success("Account created successfully!");
-            router.push("/dashboard");
+            router.push("/studio");
           },
           onError: (ctx) => {
             setError(ctx.error.message);

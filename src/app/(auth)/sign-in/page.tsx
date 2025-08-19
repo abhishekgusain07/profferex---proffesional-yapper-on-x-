@@ -34,7 +34,7 @@ export default function SignIn() {
         {
           email: formData.email,
           password: formData.password,
-          callbackURL: "/dashboard",
+          callbackURL: "/studio",
           rememberMe: formData.rememberMe,
         },
         {
@@ -42,7 +42,7 @@ export default function SignIn() {
             setLoading(true);
           },
           onSuccess: () => {
-            router.push("/dashboard");
+            router.push("/studio");
           },
           onError: (ctx) => {
             setError(ctx.error.message);
