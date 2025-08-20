@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
 
 interface LoadingContextType {
   isPageLoading: boolean
@@ -55,9 +55,9 @@ export function usePageLoadingEffect(dependencies: any[] = []) {
   const { startPageTransition, endPageTransition } = useLoadingState()
   
   // Auto-start loading on dependency changes
-  useState(() => {
+  useEffect(() => {
     startPageTransition()
     const timer = setTimeout(() => endPageTransition(), 100)
     return () => clearTimeout(timer)
-  })
+  }, dependencies)
 }

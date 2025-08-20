@@ -1,12 +1,7 @@
-import { redis } from '@/lib/redis'
 import { z } from 'zod'
-import { tool, generateId } from 'ai'
+import { tool} from 'ai'
 import { MyUIMessage } from '../../../routers/chat'
-import { format } from 'date-fns'
 import { nanoid } from 'nanoid'
-import { createCallerFactory } from '@trpc/server'
-import { twitterRouter } from '../../twitter'
-import { createTRPCContext } from '../../init'\nimport { auth } from '@/lib/auth'"}
 
 // Types for the tool context adapted for tRPC
 interface TweetToolContext {

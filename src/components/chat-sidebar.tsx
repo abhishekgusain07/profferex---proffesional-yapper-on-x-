@@ -11,7 +11,8 @@ import {
   Settings,
   ChevronRight
 } from 'lucide-react'
-import { useChatContext, useChatConversations } from '@/hooks/use-chat'
+import { useChatContext } from '@/hooks/use-chat'
+import { trpc } from '@/trpc/client'
 import { Messages } from '@/components/chat/messages'
 import { ChatInput } from '@/components/chat/chat-input'
 import { Button } from '@/components/ui/button'
@@ -37,11 +38,19 @@ export function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     error 
   } = useChatContext()
   
-  const { 
-    conversations, 
-    isLoading: conversationsLoading, 
-    deleteConversation 
-  } = useChatConversations()
+  const { data: conversationsData, isLoading: conversationsLoading } = trpc.chat.history.useQuery()
+  const deleteConversationMutation = trpc.chat.deleteConversation.useMutation()
+  
+  const conversations = conversationsData?.chatHistory || []
+  
+  const deleteConversation = async (id: string) => {
+    try {
+      await deleteConversationMutation.mutateAsync({ conversationId: id })
+      // Refetch conversations after deletion
+    } catch (error) {
+      console.error('Failed to delete conversation:', error)
+    }
+  }
 
   const handleNewChat = useCallback(async () => {
     await startNewChat()

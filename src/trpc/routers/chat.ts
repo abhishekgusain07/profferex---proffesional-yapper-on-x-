@@ -22,49 +22,39 @@ import { format } from 'date-fns'
 import { HTTPException } from 'hono/http-exception'
 import { createTweetTool } from './chat/tools/create-tweet-tool'
 
-// Types for the API (matching contentport pattern)
-export interface MyUIMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  parts: Array<{
-    type: string
-    text?: string
-    data?: {
+// Proper MyUIMessage type matching @contentport/ pattern with tRPC adaptations
+export type MyUIMessage = UIMessage<
+  Metadata,
+  {
+    'main-response': {
+      text: string
+      status: 'streaming' | 'complete'
+    }
+    'tool-output': {
       text: string
       index: number
       status: 'processing' | 'streaming' | 'complete'
     }
-  }>
-  metadata?: {
-    userMessage?: string
-    editorContent?: string
-    attachments?: Array<{
-      id: string
-      title?: string
-      type: string
-      variant: string
-      fileKey?: string
-      content?: string
-    }>
-    tweets?: Array<{
-      id: string
-      content: string
-      index: number
-    }>
+    writeTweet: {
+      status: 'processing'
+    }
+  },
+  {
+    readWebsiteContent: {
+      input: { website_url: string }
+      output: {
+        url: string
+        title: string
+        content: string
+      }
+    }
   }
-}
+>
 
 export type Metadata = {
   userMessage: string
-  attachments: Array<{
-    id: string
-    title?: string
-    type: string
-    variant: string
-    fileKey?: string
-    content?: string
-  }>
-  tweets?: Array<{
+  attachments: Array<TAttachment>
+  tweets: Array<{
     id: string
     content: string
     index: number
@@ -117,7 +107,7 @@ async function saveMessagesToRedis(chatId: string, messages: MyUIMessage[]): Pro
 }
 
 async function getMessagesFromRedis(chatId: string): Promise<MyUIMessage[]> {
-  const messages = await redis.get<MyUIMessage[]>(`chat:history:${chatId}`)
+  const messages = await redis.get(`chat:history:${chatId}`) as MyUIMessage[] | null
   return messages || []
 }
 
@@ -128,7 +118,7 @@ async function saveChatHistoryList(userEmail: string, chatHistory: ChatHistoryIt
 
 async function getChatHistoryList(userEmail: string): Promise<ChatHistoryItem[]> {
   const historyKey = `chat:history-list:${userEmail}`
-  const chatHistory = await redis.get<ChatHistoryItem[]>(historyKey)
+  const chatHistory = await redis.get(historyKey) as ChatHistoryItem[] | null
   return chatHistory || []
 }
 
@@ -139,6 +129,7 @@ async function updateChatHistoryList(userEmail: string, chatId: string, title: s
     id: chatId,
     title: title.slice(0, 50) + (title.length > 50 ? '...' : ''),
     lastUpdated: new Date().toISOString(),
+    messageCount: 0  // Add missing required property
   }
   
   // Remove existing entry and add new one at the beginning
@@ -226,7 +217,7 @@ export const chatRouter = createTRPCRouter({
       const [history, parsedAttachments, limitResult] = await Promise.all([
         getMessagesFromRedis(id),
         parseAttachments({
-          attachments: message.metadata?.attachments,
+          attachments: message.metadata?.attachments as TAttachment[],
         }),
         limiter.limit(user.email),
       ])
@@ -277,7 +268,7 @@ export const chatRouter = createTRPCRouter({
 
       const userMessage: MyUIMessage = {
         ...message,
-        parts: [{ type: 'text', text: content }, ...attachments],
+        parts: [{ type: 'text' as const, text: content }, ...attachments.map(att => ({ ...att, type: att.type as any }))],
       }
 
       const messages = [...history, userMessage] as MyUIMessage[]
@@ -540,7 +531,7 @@ export const chatRouter = createTRPCRouter({
           success: true, 
           truncatedAt: messageId,
           messagesToKeep: messagesToKeep.length,
-          lastUserMessage: lastUserMessage?.parts?.[0]?.text || null
+          lastUserMessage: lastUserMessage?.parts?.[0]?.type === 'text' ? lastUserMessage.parts[0].text : null
         }
       } catch (error) {
         console.error('Failed to regenerate message:', error)
