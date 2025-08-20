@@ -138,7 +138,7 @@ function SingleTweetEditor({ tweet, index, totalTweets, onUpdate, onRemove }: Si
 
 // Main Thread Editor Component
 export default function TweetThreadEditor() {
-  const { tweets, addTweet, updateTweet, removeTweet, clearTweets } = useTweets()
+  const { tweets, addTweet, updateTweet, removeTweet, resetTweets } = useTweets()
   
   const handleAddTweet = () => {
     addTweet({ initialContent: '' })
@@ -169,7 +169,7 @@ export default function TweetThreadEditor() {
           <Button
             variant="outline"
             size="sm"
-            onClick={clearTweets}
+            onClick={() => resetTweets()}
             className="text-red-600 hover:text-red-700"
           >
             Clear All

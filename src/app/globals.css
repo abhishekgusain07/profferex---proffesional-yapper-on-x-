@@ -77,3 +77,26 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Tweet Editor Safeguards */
+@layer utilities {
+  /* Ensure proper text flow in tweet editors */
+  [data-lexical-editor] {
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+    text-wrap: wrap !important;
+  }
+  
+  /* Prevent unwanted line breaks in tweet content */
+  [data-lexical-editor] p {
+    display: inline !important;
+    white-space: normal !important;
+  }
+  
+  /* Ensure text nodes flow properly */
+  [data-lexical-editor] span {
+    display: inline !important;
+    white-space: normal !important;
+  }
+}

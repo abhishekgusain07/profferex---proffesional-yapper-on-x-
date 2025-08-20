@@ -47,7 +47,7 @@ interface TweetContextType {
   addTweet: ({ initialContent, index }: { initialContent: string; index?: number }) => void
   updateTweet: (id: string, content: string) => void
   removeTweet: (id: string) => void
-  clearTweets: () => void
+  resetTweets: () => Promise<void>
 }
 
 const TweetContext = createContext<TweetContextType | undefined>(undefined)
@@ -151,15 +151,18 @@ export function TweetProvider({ children }: PropsWithChildren) {
     setTweets((prev) => 
       prev.map((tweet) => {
         if (tweet.id === id) {
-          // Update the editor content
-          tweet.editor.update(() => {
-            const root = $getRoot()
-            root.clear()
-            const paragraph = $createParagraphNode()
-            const textNode = $createTextNode(content)
-            paragraph.append(textNode)
-            root.append(paragraph)
-          })
+          // Update the editor content with proper sync
+          tweet.editor.update(
+            () => {
+              const root = $getRoot()
+              root.clear()
+              const paragraph = $createParagraphNode()
+              const textNode = $createTextNode(content)
+              paragraph.append(textNode)
+              root.append(paragraph)
+            },
+            { tag: 'force-sync' }
+          )
           return { ...tweet, content }
         }
         return tweet
@@ -175,8 +178,51 @@ export function TweetProvider({ children }: PropsWithChildren) {
     )
   }
 
-  const clearTweets = () => {
-    setTweets([])
+  const resetTweets = async () => {
+    // Clear editor content for all existing tweets
+    await Promise.all(
+      tweets.map(async (tweet) => {
+        if (tweet.editor) {
+          await new Promise<void>((resolve) => {
+            tweet.editor.update(
+              () => {
+                const root = $getRoot()
+                root.clear()
+                const paragraph = $createParagraphNode()
+                root.append(paragraph)
+              },
+              { onUpdate: resolve, tag: 'force-sync' },
+            )
+          })
+        }
+      })
+    )
+
+    // Create a new tweet with fresh editor
+    const newTweetId = nanoid()
+    const newEditor = createEditor({ ...initialConfig })
+    
+    // Initialize the new editor with empty paragraph
+    await new Promise<void>((resolve) => {
+      newEditor.update(
+        () => {
+          const root = $getRoot()
+          const paragraph = $createParagraphNode()
+          root.append(paragraph)
+        },
+        { onUpdate: resolve, tag: 'force-sync' },
+      )
+    })
+
+    setTweets([
+      {
+        id: newTweetId,
+        content: '',
+        mediaIds: [],
+        index: 0,
+        editor: newEditor,
+      }
+    ])
   }
 
   return (
@@ -198,7 +244,7 @@ export function TweetProvider({ children }: PropsWithChildren) {
         addTweet,
         updateTweet,
         removeTweet,
-        clearTweets,
+        resetTweets,
       }}
     >
       {children}
