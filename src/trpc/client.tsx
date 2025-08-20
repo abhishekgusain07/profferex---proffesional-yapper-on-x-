@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react'
 import { makeQueryClient } from './query-client'
 import type { AppRouter } from './routers/_app'
 import superjson from 'superjson'
-import { SessionProvider } from '@/components/session-provider'
 
 export const trpc = createTRPCReact<AppRouter>()
 
@@ -34,16 +33,9 @@ function getUrl() {
 
 interface TRPCProviderProps {
   children: React.ReactNode
-  initialSession?: {
-    user?: {
-      id: string
-      email: string
-      name?: string
-    }
-  } | null
 }
 
-export function TRPCProvider({ children, initialSession }: TRPCProviderProps) {
+export function TRPCProvider({ children }: TRPCProviderProps) {
   // NOTE: Avoid useState when initializing the query client if you don't
   //       have a suspense boundary between this and the code that may
   //       suspend because React will throw away the client on the initial
@@ -67,18 +59,10 @@ export function TRPCProvider({ children, initialSession }: TRPCProviderProps) {
     })
   )
 
-  useEffect(() => {
-    if (initialSession) {
-      queryClient.setQueryData(['session'], initialSession)
-    }
-  }, [initialSession, queryClient])
-
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <SessionProvider initialSession={initialSession}>
-          {children}
-        </SessionProvider>
+        {children}
       </QueryClientProvider>
     </trpc.Provider>
   )

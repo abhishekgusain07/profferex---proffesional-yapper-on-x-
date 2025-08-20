@@ -8,19 +8,12 @@ import { Toaster } from 'react-hot-toast'
 
 interface ProvidersProps {
   children: React.ReactNode
-  initialSession?: {
-    user?: {
-      id: string
-      email: string
-      name?: string
-    }
-  } | null
 }
 
-export function Providers({ children, initialSession }: ProvidersProps) {
+export function Providers({ children }: ProvidersProps) {
   return (
     <NuqsAdapter>
-      <TRPCProvider initialSession={initialSession}>
+      <TRPCProvider>
         <AccountProvider>
           {children}
           <Toaster 

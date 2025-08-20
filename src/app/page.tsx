@@ -2,7 +2,7 @@
 
 import Navbar from '@/components/navbar'
 import DuolingoButton from '@/components/ui/duolingo-button'
-import { useSessionContext } from '@/components/session-provider'
+import { useSession } from '@/lib/auth-client'
 import { signOut } from '@/lib/auth-client'
 import Link from 'next/link'
 import Script from 'next/script'
@@ -10,7 +10,7 @@ import YCButtonLight from '@/components/notycomb'
 import { Spotlight } from '@/components/ui/spotlight-new'
 
 const Page = () => {
-  const { session } = useSessionContext()
+  const { data: session } = useSession()
 
   return (
     <>
