@@ -11,8 +11,45 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { trpc } from '@/trpc/client'
-import { Brain, Search, FileText, Globe, Plus } from 'lucide-react'
+import { Brain, Search, FileText, Globe, Plus, Zap, Filter } from 'lucide-react'
 import Link from 'next/link'
+
+// Calculate thread relevance score for better document suggestions
+function calculateThreadRelevance(doc: any, threadContext?: any): number {
+  if (!threadContext?.isGeneratingThread) return 0
+  
+  let score = 0
+  
+  // Type-based scoring (some types work better for threads)
+  const typeScores = {
+    'txt': 10,
+    'pdf': 8,
+    'url': 9,
+    'docx': 6,
+    'image': 4,
+    'manual': 3
+  }
+  score += typeScores[doc.type as keyof typeof typeScores] || 0
+  
+  // Topic relevance (basic keyword matching)
+  if (threadContext.currentTopic && doc.title && doc.description) {
+    const topic = threadContext.currentTopic.toLowerCase()
+    const content = (doc.title + ' ' + doc.description).toLowerCase()
+    if (content.includes(topic)) score += 15
+  }
+  
+  // Preferred types
+  if (threadContext.preferredTypes?.includes(doc.type)) {
+    score += 5
+  }
+  
+  // Recent usage boost (could be enhanced with actual usage tracking)
+  if (doc.lastUsed && Date.now() - new Date(doc.lastUsed).getTime() < 7 * 24 * 60 * 60 * 1000) {
+    score += 3
+  }
+  
+  return score
+}
 
 export interface SelectedKnowledgeDocument {
   id: string
@@ -25,18 +62,51 @@ export interface SelectedKnowledgeDocument {
 interface KnowledgeSelectorProps {
   onSelectDocument: (doc: SelectedKnowledgeDocument) => void
   className?: string
+  // Thread context for better suggestions
+  threadContext?: {
+    isGeneratingThread?: boolean
+    currentTopic?: string
+    preferredTypes?: Array<'url' | 'txt' | 'docx' | 'pdf' | 'image' | 'manual'>
+  }
 }
 
-export function KnowledgeSelector({ onSelectDocument, className }: KnowledgeSelectorProps) {
+export function KnowledgeSelector({ onSelectDocument, className, threadContext }: KnowledgeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'thread-optimal' | 'recent'>('all')
 
   const { data: knowledgeData, isLoading } = trpc.knowledge.list.useQuery({
     search: searchQuery || undefined,
-    limit: 20,
+    limit: 50, // Increased to allow better filtering
+    // Add thread context to query if needed
+    category: selectedCategory === 'thread-optimal' ? 'thread-optimal' : undefined,
   })
 
-  const documents = knowledgeData?.documents || []
+  const rawDocuments = knowledgeData?.documents || []
+
+  // Enhanced document processing with thread relevance
+  const documents = rawDocuments
+    .map(doc => ({
+      ...doc,
+      threadRelevance: calculateThreadRelevance(doc, threadContext),
+      isThreadOptimal: ['txt', 'pdf', 'url'].includes(doc.type),
+    }))
+    .filter(doc => {
+      if (selectedCategory === 'thread-optimal') {
+        return doc.isThreadOptimal
+      }
+      if (selectedCategory === 'recent') {
+        // Show recently used documents (could be tracked in metadata)
+        return true // For now, show all
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (threadContext?.isGeneratingThread) {
+        return b.threadRelevance - a.threadRelevance
+      }
+      return 0 // Keep original order for non-thread contexts
+    })
 
   const handleSelectDocument = useCallback((doc: any) => {
     onSelectDocument({
@@ -97,16 +167,63 @@ export function KnowledgeSelector({ onSelectDocument, className }: KnowledgeSele
           <div className="flex items-center gap-2 mb-3">
             <Brain className="size-5 text-gray-700" />
             <h3 className="font-semibold text-gray-900">Knowledge Base</h3>
+            {threadContext?.isGeneratingThread && (
+              <Badge variant="secondary" className="text-xs gap-1">
+                <Zap className="size-3" />
+                Thread Mode
+              </Badge>
+            )}
           </div>
+          
+          {/* Category filters for thread generation */}
+          {threadContext?.isGeneratingThread && (
+            <div className="flex gap-1 mb-3">
+              <Button
+                variant={selectedCategory === 'all' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setSelectedCategory('all')}
+                className="text-xs px-2 py-1 h-auto"
+              >
+                All
+              </Button>
+              <Button
+                variant={selectedCategory === 'thread-optimal' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setSelectedCategory('thread-optimal')}
+                className="text-xs px-2 py-1 h-auto gap-1"
+              >
+                <Zap className="size-3" />
+                Best for Threads
+              </Button>
+              <Button
+                variant={selectedCategory === 'recent' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setSelectedCategory('recent')}
+                className="text-xs px-2 py-1 h-auto"
+              >
+                Recent
+              </Button>
+            </div>
+          )}
+          
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 size-4" />
             <Input
-              placeholder="Search knowledge..."
+              placeholder={threadContext?.isGeneratingThread ? "Search for thread context..." : "Search knowledge..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 border-gray-200 focus:border-blue-500"
             />
           </div>
+          
+          {/* Thread optimization tip */}
+          {threadContext?.isGeneratingThread && selectedCategory === 'all' && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-xs text-blue-700">
+                💡 Text files, PDFs, and URLs work best for generating Twitter threads
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="max-h-96 overflow-y-auto">
@@ -155,12 +272,30 @@ export function KnowledgeSelector({ onSelectDocument, className }: KnowledgeSele
                         <h4 className="font-medium text-gray-900 truncate group-hover:text-blue-900">
                           {doc.title}
                         </h4>
-                        <Badge 
-                          variant={getDocumentBadgeVariant(doc.type)}
-                          className="text-xs"
-                        >
-                          {doc.type}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge 
+                            variant={getDocumentBadgeVariant(doc.type)}
+                            className="text-xs"
+                          >
+                            {doc.type}
+                          </Badge>
+                          {/* Thread relevance indicators */}
+                          {threadContext?.isGeneratingThread && (
+                            <>
+                              {doc.isThreadOptimal && (
+                                <Badge variant="secondary" className="text-xs gap-1 bg-green-100 text-green-700">
+                                  <Zap className="size-2" />
+                                  Optimal
+                                </Badge>
+                              )}
+                              {doc.threadRelevance > 15 && (
+                                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                                  Relevant
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
                       {doc.description && (
                         <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">

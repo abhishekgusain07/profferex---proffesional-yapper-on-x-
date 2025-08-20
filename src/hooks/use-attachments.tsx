@@ -18,7 +18,7 @@ interface AttachmentsContextType {
   hasUploading: boolean
   
   // Actions
-  addChatAttachment: (file: File) => void
+  addChatAttachment: (file: File, threadContext?: { isThreadGeneration?: boolean; threadId?: string }) => void
   addKnowledgeAttachment: (doc: SelectedKnowledgeDocument) => void
   addVideoAttachment: (fileKey: string, title: string) => void
   removeAttachment: (params: { id: string }) => void
@@ -27,6 +27,11 @@ interface AttachmentsContextType {
   // Utils
   getAttachmentById: (id: string) => Attachment | undefined
   getAttachmentsByType: (type: Attachment['type']) => Attachment[]
+  // Thread-aware utils
+  getThreadRelevantAttachments: () => Attachment[]
+  hasImageAttachments: boolean
+  hasDocumentAttachments: boolean
+  totalAttachmentSize: number
 }
 
 const AttachmentsContext = createContext<AttachmentsContextType | null>(null)
@@ -63,10 +68,27 @@ function detectFileType(file: File): Attachment['type'] {
   return 'manual'
 }
 
-// File size validation
-function validateFileSize(file: File): boolean {
+// Enhanced file validation for thread context
+function validateFileSize(file: File, isThreadGeneration = false): { valid: boolean; error?: string } {
   const maxSize = 50 * 1024 * 1024 // 50MB
-  return file.size <= maxSize
+  const threadOptimalSize = 10 * 1024 * 1024 // 10MB for better thread generation
+  
+  if (file.size > maxSize) {
+    return { valid: false, error: 'File size must be less than 50MB' }
+  }
+  
+  if (isThreadGeneration && file.size > threadOptimalSize) {
+    return { valid: true, error: 'Large files may slow thread generation. Consider using smaller files for better performance.' }
+  }
+  
+  return { valid: true }
+}
+
+// Check if file type is optimal for thread generation
+function isThreadOptimalFile(file: File): boolean {
+  const type = detectFileType(file)
+  // Images and text files are best for thread generation
+  return ['image', 'txt', 'pdf'].includes(type)
 }
 
 // File upload function
@@ -112,24 +134,51 @@ async function uploadFile(file: File): Promise<{ fileKey: string; uploadProgress
 export function AttachmentsProvider({ children }: PropsWithChildren) {
   const [attachments, setAttachments] = useState<Attachment[]>([])
 
-  // Check if any attachments are currently uploading
+  // Enhanced computed properties
   const hasUploading = attachments.some(
     (attachment) => 
       attachment.variant === 'chat' && attachment.isUploading
   )
 
-  // Add chat attachment (file upload)
-  const addChatAttachment = useCallback(async (file: File) => {
-    // Validate file size
-    if (!validateFileSize(file)) {
-      toast.error('File size must be less than 50MB')
+  const hasImageAttachments = attachments.some(att => att.type === 'image')
+  const hasDocumentAttachments = attachments.some(att => ['pdf', 'docx', 'txt'].includes(att.type))
+  
+  const totalAttachmentSize = attachments.reduce((total, att) => {
+    if (att.variant === 'chat' && 'size' in att && att.size) {
+      return total + att.size
+    }
+    return total
+  }, 0)
+
+  // Enhanced add chat attachment with thread context
+  const addChatAttachment = useCallback(async (
+    file: File, 
+    threadContext?: { isThreadGeneration?: boolean; threadId?: string }
+  ) => {
+    // Enhanced validation
+    const validation = validateFileSize(file, threadContext?.isThreadGeneration)
+    if (!validation.valid) {
+      toast.error(validation.error!)
       return
+    }
+    
+    // Show warning for non-optimal files
+    if (validation.error) {
+      toast.error(validation.error, { duration: 4000 })
+    }
+
+    // Show thread optimization tip
+    if (threadContext?.isThreadGeneration && !isThreadOptimalFile(file)) {
+      toast(`Tip: ${file.type.includes('image') ? 'Images' : 'Text/PDF files'} work best for thread generation`, {
+        icon: '💡',
+        duration: 3000
+      })
     }
 
     const id = nanoid()
     const type = detectFileType(file)
     
-    // Create initial attachment with uploading state
+    // Create initial attachment with uploading state and enhanced metadata
     const attachment: ChatAttachment = {
       id,
       title: file.name,
@@ -138,6 +187,10 @@ export function AttachmentsProvider({ children }: PropsWithChildren) {
       // fileKey is optional during upload
       uploadProgress: 0,
       isUploading: true,
+      // Enhanced metadata for thread context
+      size: file.size,
+      threadContext: threadContext,
+      uploadStartTime: Date.now(),
     }
 
     // Add to state immediately
@@ -251,6 +304,15 @@ export function AttachmentsProvider({ children }: PropsWithChildren) {
     return attachments.filter(att => att.type === type)
   }, [attachments])
 
+  // Get thread-relevant attachments (images and documents that help with thread generation)
+  const getThreadRelevantAttachments = useCallback(() => {
+    return attachments.filter(att => {
+      if (att.variant === 'knowledge') return true
+      if (att.variant === 'chat' && ['image', 'pdf', 'txt', 'docx'].includes(att.type)) return true
+      return false
+    })
+  }, [attachments])
+
   const contextValue: AttachmentsContextType = {
     attachments,
     hasUploading,
@@ -261,6 +323,10 @@ export function AttachmentsProvider({ children }: PropsWithChildren) {
     clearAttachments,
     getAttachmentById,
     getAttachmentsByType,
+    getThreadRelevantAttachments,
+    hasImageAttachments,
+    hasDocumentAttachments,
+    totalAttachmentSize,
   }
 
   return (
