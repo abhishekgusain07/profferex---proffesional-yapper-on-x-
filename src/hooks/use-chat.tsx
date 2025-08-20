@@ -55,9 +55,9 @@ export function ChatProvider({ children }: PropsWithChildren) {
     setLastActivity(new Date())
   }
 
-  // Enhanced tRPC mutations for message management - TODO: Implement in Phase 2
-  // const deleteChatMessageMutation = trpc.chat.deleteMessage.useMutation()
-  // const regenerateMessageMutation = trpc.chat.regenerateMessage.useMutation()
+  // Enhanced tRPC mutations for message management
+  const deleteChatMessageMutation = trpc.chat.deleteMessage.useMutation()
+  // const regenerateMessageMutation = trpc.chat.regenerateMessage.useMutation() // Used in regenerateResponse
 
   const chat = useChat({
     id,
@@ -161,11 +161,28 @@ export function ChatProvider({ children }: PropsWithChildren) {
   }, [chat, chat.messages, chat.setMessages])
 
   const deleteMessage = useCallback(async (messageId: string) => {
-    // TODO: Implement in Phase 2 - deleteMessage endpoint
-    console.log('deleteMessage called with:', messageId)
-    toast.error('Message deletion will be available soon!')
-    return Promise.resolve()
-  }, [])
+    try {
+      // Remove from local state immediately for optimistic UI
+      const updatedMessages = chat.messages.filter(m => m.id !== messageId)
+      chat.setMessages(updatedMessages)
+
+      // Delete from server
+      await deleteChatMessageMutation.mutateAsync({ 
+        chatId: id, 
+        messageId 
+      })
+      
+      toast.success('Message deleted')
+    } catch (error) {
+      console.error('Failed to delete message:', error)
+      toast.error('Failed to delete message')
+      
+      // Revert on error
+      if (data?.messages) {
+        chat.setMessages(data.messages as never[])
+      }
+    }
+  }, [chat.messages, chat.setMessages, deleteChatMessageMutation, id, data])
 
   const contextValue = useMemo(() => ({ 
     ...chat, 
@@ -211,7 +228,7 @@ export function useChatContext() {
 export function useChatConversations() {
   const { data, isLoading, refetch } = trpc.chat.history.useQuery()
   const deleteConversationMutation = trpc.chat.deleteConversation.useMutation()
-  // const updateConversationMutation = trpc.chat.updateConversation.useMutation() // TODO: Implement in Phase 2
+  const updateConversationMutation = trpc.chat.updateConversationTitle.useMutation()
 
   const deleteConversation = useCallback(async (conversationId: string) => {
     try {
@@ -225,11 +242,15 @@ export function useChatConversations() {
   }, [deleteConversationMutation, refetch])
 
   const updateConversationTitle = useCallback(async (conversationId: string, title: string) => {
-    // TODO: Implement in Phase 2 - updateConversation endpoint
-    console.log('updateConversationTitle called with:', { conversationId, title })
-    toast.error('Conversation title update will be available soon!')
-    return Promise.resolve()
-  }, [])
+    try {
+      await updateConversationMutation.mutateAsync({ conversationId, title })
+      await refetch()
+      toast.success('Title updated')
+    } catch (error) {
+      console.error('Failed to update title:', error)
+      toast.error('Failed to update title')
+    }
+  }, [updateConversationMutation, refetch])
 
   // Enhanced conversation data with thread detection
   const processedConversations = useMemo(() => {

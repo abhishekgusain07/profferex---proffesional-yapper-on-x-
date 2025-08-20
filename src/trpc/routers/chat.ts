@@ -440,4 +440,163 @@ export const chatRouter = createTRPCRouter({
         reset: result.reset,
       }
     }),
+
+  // Delete a specific message from chat history
+  deleteMessage: protectedProcedure
+    .input(z.object({
+      chatId: z.string(),
+      messageId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { user } = ctx
+      const { chatId, messageId } = input
+
+      try {
+        // Get current messages from Redis
+        const messages = await getMessagesFromRedis(chatId)
+        
+        if (!messages || messages.length === 0) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Chat not found',
+          })
+        }
+
+        // Filter out the message to delete
+        const updatedMessages = messages.filter(msg => msg.id !== messageId)
+        
+        if (updatedMessages.length === messages.length) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Message not found',
+          })
+        }
+
+        // Save updated messages back to Redis
+        await saveMessagesToRedis(chatId, updatedMessages)
+
+        // Update chat history list if this was the last message
+        if (messages.length > 0 && messages[messages.length - 1]?.id === messageId) {
+          const title = updatedMessages.length > 0 
+            ? (updatedMessages[0]?.metadata?.userMessage ?? 'Unnamed chat')
+            : 'Empty chat'
+          await updateChatHistoryList(user.email, chatId, title)
+        }
+
+        return { success: true, deletedMessageId: messageId }
+      } catch (error) {
+        console.error('Failed to delete message:', error)
+        if (error instanceof TRPCError) {
+          throw error
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to delete message',
+        })
+      }
+    }),
+
+  // Regenerate AI response from a specific point
+  regenerateMessage: protectedProcedure
+    .input(z.object({
+      chatId: z.string(),
+      messageId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { user } = ctx
+      const { chatId, messageId } = input
+
+      try {
+        // Get current messages from Redis
+        const messages = await getMessagesFromRedis(chatId)
+        
+        if (!messages || messages.length === 0) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Chat not found',
+          })
+        }
+
+        // Find the message index
+        const messageIndex = messages.findIndex(msg => msg.id === messageId)
+        
+        if (messageIndex === -1) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Message not found',
+          })
+        }
+
+        // Keep messages up to (but not including) the message to regenerate
+        const messagesToKeep = messages.slice(0, messageIndex)
+        
+        // Save the truncated messages
+        await saveMessagesToRedis(chatId, messagesToKeep)
+
+        // Return the last user message for re-processing
+        const lastUserMessage = messagesToKeep.findLast(msg => msg.role === 'user')
+        
+        return { 
+          success: true, 
+          truncatedAt: messageId,
+          messagesToKeep: messagesToKeep.length,
+          lastUserMessage: lastUserMessage?.parts?.[0]?.text || null
+        }
+      } catch (error) {
+        console.error('Failed to regenerate message:', error)
+        if (error instanceof TRPCError) {
+          throw error
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to regenerate message',
+        })
+      }
+    }),
+
+  // Update conversation title
+  updateConversationTitle: protectedProcedure
+    .input(z.object({
+      conversationId: z.string(),
+      title: z.string().min(1).max(100),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { user } = ctx
+      const { conversationId, title } = input
+
+      try {
+        // Update the chat history list
+        const existingHistory = await getChatHistoryList(user.email)
+        const updatedHistory = existingHistory.map(item => 
+          item.id === conversationId 
+            ? { ...item, title: title.slice(0, 50) + (title.length > 50 ? '...' : '') }
+            : item
+        )
+
+        if (updatedHistory.length === existingHistory.length && 
+            !updatedHistory.some(item => item.id === conversationId)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Conversation not found',
+          })
+        }
+
+        await saveChatHistoryList(user.email, updatedHistory)
+
+        return { 
+          success: true, 
+          conversationId, 
+          title: title.slice(0, 50) + (title.length > 50 ? '...' : '')
+        }
+      } catch (error) {
+        console.error('Failed to update conversation title:', error)
+        if (error instanceof TRPCError) {
+          throw error
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update conversation title',
+        })
+      }
+    }),
 })
