@@ -1,27 +1,30 @@
-'use client'
-
-import { useState, memo, PropsWithChildren } from 'react'
-import { motion } from 'framer-motion'
-import { ChevronsLeft, Copy, MoreHorizontal } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { StreamingMessage } from './streaming-message'
-import { AccountAvatar, AccountName, AccountHandle } from '@/hooks/use-account'
 import { useTweets } from '@/hooks/use-tweets'
+import { cn } from '@/lib/utils'
+import { motion } from 'framer-motion'
 import { $createParagraphNode, $createTextNode, $getRoot } from 'lexical'
-import toast from 'react-hot-toast'
-
-interface TweetMockupProps {
-  text?: string
-  content?: string
-  isLoading?: boolean
-  children?: React.ReactNode
-}
+import { ChevronsLeft } from 'lucide-react'
+import { PropsWithChildren, memo } from 'react'
+import DuolingoButton from '../ui/duolingo-button'
+import { AccountAvatar, AccountHandle, AccountName } from '@/hooks/use-account'
 
 export const TweetMockup = memo(
-  ({ text, content, isLoading = false, children }: TweetMockupProps) => {
-    const { shadowEditor } = useTweets()
-    const displayText = text || content || ''
+  ({
+    children,
+    index,
+    text,
+    threads,
+    isConnectedBefore,
+    isConnectedAfter,
+    isLoading = false,
+  }: PropsWithChildren<{
+    isLoading?: boolean
+    text?: string
+    threads?: string[]
+    isConnectedBefore?: boolean
+    isConnectedAfter?: boolean
+    index: number
+  }>) => {
+    const { addTweet, updateTweet, tweets } = useTweets()
 
     const containerVariants = {
       hidden: { opacity: 0, y: 20, scale: 0.95 },
@@ -30,7 +33,7 @@ export const TweetMockup = memo(
         y: 0,
         scale: 1,
         transition: {
-          type: 'spring' as const,
+          type: 'spring',
           duration: 0.6,
           bounce: 0.1,
           staggerChildren: 0.1,
@@ -39,32 +42,34 @@ export const TweetMockup = memo(
       },
     }
 
-    const handleApply = () => {
-      if (displayText) {
-        shadowEditor.update(
+    const apply = async () => {
+      if (threads && threads.length > 1) {
+        for (let i = 0; i < threads.length; i++) {
+          const initialContent = threads[i]?.trim() as string
+
+          if (tweets[i]) {
+            updateTweet(tweets[i]!.id, initialContent)
+          } else {
+            addTweet({ initialContent, index: i })
+          }
+        }
+      } else {
+        const tweet = tweets[index]
+        const shadowEditor = tweet?.editor
+
+        shadowEditor?.update(
           () => {
             const root = $getRoot()
             const paragraph = $createParagraphNode()
-            const textNode = $createTextNode(displayText)
+            const textNode = $createTextNode(text || '')
 
             root.clear()
+
             paragraph.append(textNode)
             root.append(paragraph)
           },
           { tag: 'force-sync' },
         )
-        toast.success('Tweet applied')
-      }
-    }
-
-    const handleCopy = async () => {
-      if (displayText) {
-        try {
-          await navigator.clipboard.writeText(displayText)
-          toast.success('Tweet copied to clipboard')
-        } catch (error) {
-          toast.error('Failed to copy tweet')
-        }
       }
     }
 
@@ -73,55 +78,50 @@ export const TweetMockup = memo(
         variants={isLoading ? containerVariants : undefined}
         initial={isLoading ? 'hidden' : false}
         animate={isLoading ? 'visible' : false}
-        className="w-full min-w-0 py-3 px-4 rounded-2xl border border-black border-opacity-[0.01] bg-clip-padding group isolate bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05),0_4px_6px_rgba(34,42,53,0.04),0_24px_68px_rgba(47,48,55,0.05),0_2px_3px_rgba(0,0,0,0.04)]"
+        className={cn(
+          'w-full grid grid-cols-[40px,1fr] gap-3 min-w-0 py-3 px-4 rounded-2xl',
+          {
+            'p-6': threads?.length === 1 || isLoading,
+            'border border-black border-opacity-[0.01] bg-clip-padding group bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05),0_4px_6px_rgba(34,42,53,0.04),0_24px_68px_rgba(47,48,55,0.05),0_2px_3px_rgba(0,0,0,0.04)]':
+              !isConnectedAfter && !isConnectedBefore,
+          },
+        )}
       >
-        <div className="flex items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <AccountAvatar className="size-8" />
-            <div className="flex flex-col">
-              <AccountName animate className="leading-[1.2] text-sm" />
-              <AccountHandle className="text-sm leading-[1.2]" />
-            </div>
-          </div>
-
-          {!isLoading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2"
-            >
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleCopy}
-                      className="h-8 w-8 hover:bg-gray-100"
-                    >
-                      <Copy className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Copy tweet</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <Button
-                onClick={handleApply}
-                variant="secondary"
-                size="sm"
-                className="text-sm w-fit h-8 px-3 bg-blue-500 hover:bg-blue-600 text-white border-0"
-              >
-                <ChevronsLeft className="size-4 mr-1" />
-                Apply
-              </Button>
-            </motion.div>
-          )}
+        <div className="relative z-50 w-10 h-14 bg-white flex -top-2.5 items-center justify-center">
+          <AccountAvatar className="relative !z-50 size-10" />
         </div>
 
         <div className="w-full flex flex-col items-start">
-          <div className="w-full flex-1 py-2.5">
-            <div className="mt-1 text-slate-800 text-[15px] space-y-3 whitespace-pre-wrap">
+          <div className="w-full flex items-center justify-between gap-6">
+            <div className="flex items-center gap-1.5">
+              <AccountName animate className="leading-[1.2] text-sm" />
+              <AccountHandle className="text-sm leading-[1.2]" />
+            </div>
+
+            {!isLoading && !isConnectedBefore && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{
+                  opacity: 1,
+                }}
+                className="absolute right-4 top-4 flex items-center gap-2"
+              >
+                <DuolingoButton
+                  onClick={apply}
+                  variant="secondary"
+                  size="sm"
+                  className="text-sm w-fit h-8 px-2"
+                >
+                  <ChevronsLeft className="size-4 mr-1" /> Apply
+                </DuolingoButton>
+              </motion.div>
+            )}
+          </div>
+
+          <div className="w-full flex-1 pt-0.5">
+            <div
+              className={'mt-1 text-slate-800 text-[15px] space-y-3 whitespace-pre-wrap'}
+            >
               {isLoading ? (
                 <div className="space-y-2">
                   <motion.div
@@ -147,14 +147,14 @@ export const TweetMockup = memo(
                   />
                 </div>
               ) : (
-                children || <StreamingMessage content={displayText} />
+                children
               )}
             </div>
           </div>
         </div>
       </motion.div>
     )
-  }
+  },
 )
 
 TweetMockup.displayName = 'TweetMockup'

@@ -1,167 +1,197 @@
-'use client'
-
-import { memo, useEffect, useRef, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { MessageWrapper } from './message-wrapper'
-import { LoadingMessage } from './loading-message'
-import { TweetMockup } from './tweet-mockup'
-import { StreamingMessage } from './streaming-message'
-import ReactMarkdown from 'react-markdown'
+import { MyUIMessage } from '@/trpc/routers/chat'
 import { ChatStatus } from 'ai'
+import { memo, useMemo } from 'react'
+import ReactMarkdown from 'react-markdown'
+import { ChatContainerContent, ChatContainerRoot } from '../ui/chat-container'
+import { LoadingMessage } from './loading-message'
+import { MessageWrapper } from './message-wrapper'
+import { StreamingMessage } from './streaming-message'
+import { TweetMockup } from './tweet-mockup'
+import { WebsiteMockup } from './website-mockup'
+import { ScrollButton } from '../ui/scroll-button'
+import { cn } from '@/lib/utils'
+import { motion } from 'framer-motion'
 
-interface MessagesProps {
-  messages: any[] // Use AI SDK message type like contentport-main
-  status: ChatStatus
-  error?: Error
-}
+export const Messages = memo(
+  ({
+    messages,
+    error,
+    status,
+  }: {
+    messages: MyUIMessage[]
+    error?: Error
+    status: ChatStatus
+  }) => {
+    const lastUserMessageIndex = useMemo(
+      () => messages.findLastIndex((m) => m.role === 'user'),
+      [messages],
+    )
 
-export const Messages = memo(({ messages, status, error }: MessagesProps) => {
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+    console.log({ messages })
 
-  const lastUserMessageIndex = useMemo(
-    () => messages.findLastIndex((m) => m.role === 'user'),
-    [messages],
-  )
+    const visibleMessages = useMemo(
+      () =>
+        messages.filter((message) =>
+          message.parts.some((part) => part.type === 'text' && Boolean(part.text)),
+        ),
+      [messages],
+    )
 
-  const visibleMessages = useMemo(
-    () =>
-      messages.filter((message) =>
-        message.parts?.some((part: any) => part.type === 'text' && Boolean(part.text)) || 
-        Boolean(message.content)
-      ),
-    [messages],
-  )
+    const showLoadingMessage = useMemo(() => {
+      return (
+        !error &&
+        (status === 'submitted' ||
+          (status === 'streaming' &&
+            !Boolean(
+              messages[messages.length - 1]?.parts.some(
+                (part) => part.type === 'text' && Boolean(part.text),
+              ),
+            )))
+      )
+    }, [error, status, messages])
 
-  const showLoadingMessage = useMemo(() => {
+    const hasImageAttachment = useMemo(() => {
+      return Boolean(
+        messages[lastUserMessageIndex]?.metadata?.attachments?.some(
+          (a) => a.type === 'image',
+        ),
+      )
+    }, [messages, lastUserMessageIndex])
+
     return (
-      !error &&
-      (status === 'submitted' ||
-        (status === 'streaming' &&
-          !Boolean(
-            messages[messages.length - 1]?.parts?.some(
-              (part: any) => part.type === 'text' && Boolean(part.text),
-            ) || messages[messages.length - 1]?.content
-          )))
-    )
-  }, [error, status, messages])
+      <>
+        <ChatContainerRoot className="h-full overflow-y-auto">
+          <ChatContainerContent className="space-y-6 px-4 pt-6 pb-6">
+            {visibleMessages.map((message, index) => {
+              const isUser = message.role === 'user'
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [messages])
-
-  const hasImageAttachment = useMemo(() => {
-    return Boolean(
-      messages[lastUserMessageIndex]?.metadata?.attachments?.some(
-        (a: any) => a.type === 'image',
-      ),
-    )
-  }, [messages, lastUserMessageIndex])
-
-  return (
-    <div className="h-full overflow-y-auto p-4 space-y-6">
-      {visibleMessages.map((message, index) => {
-        const isUser = message.role === 'user'
-        
-        return (
-          <div
-            key={message.id}
-            data-message-index={index}
-            data-message-role={message.role}
-            className="flex gap-3 group"
-          >
-            <div className="flex-shrink-0">
-              {isUser ? (
-                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center shadow-sm">
-                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-              ) : (
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-sm">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              )}
-            </div>
-            <div className={`flex-1 ${isUser ? 'bg-blue-500 text-white rounded-2xl px-4 py-3' : 'bg-white border border-gray-200 rounded-2xl px-4 py-3'}`}>
-              {message.parts ? (
-                message.parts.map((part: any, i: number) => {
-                  if (part.type === 'tool-readWebsiteContent') {
-                    if (
-                      part.state === 'input-available' ||
-                      part.state === 'input-streaming'
-                    ) {
-                      return <div key={i}>Website loading...</div>
+              return (
+                <div
+                  key={message.id}
+                  data-message-index={index}
+                  data-message-role={message.role}
+                >
+                  <MessageWrapper
+                    id={message.id}
+                    metadata={message.metadata}
+                    disableAnimation={message.role === 'assistant'}
+                    isUser={isUser}
+                    showOptions={
+                      (message.role === 'assistant' &&
+                        (status === 'ready' || status === 'error')) ||
+                      index !== messages.length - 1
                     }
-
-                    if (part.output) {
-                      return (
-                        <div key={i}>
-                          <h3>{part.output.title}</h3>
-                          <ReactMarkdown>
-                            {part.output.content.slice(0, 250)}
-                          </ReactMarkdown>
-                        </div>
-                      )
+                    animateLogo={
+                      index === messages.length - 1 &&
+                      (status === 'submitted' || status === 'streaming')
                     }
+                  >
+                    {message.parts.map((part, i) => {
+                      if (part.type === 'text') {
+                        if (!part.text) return null
 
-                    return null
-                  }
+                        return (
+                          <div className="whitespace-pre-wrap" key={i}>
+                            <StreamingMessage
+                              markdown
+                              animate={message.role === 'assistant'}
+                              text={message.metadata?.userMessage || part.text}
+                            />
+                          </div>
+                        )
+                      }
 
-                  if (part.type === 'data-tool-output') {
-                    if (part.data.status === 'processing') {
-                      return <TweetMockup key={i} isLoading />
-                    }
+                      if (part.type === 'tool-readWebsiteContent') {
+                        if (
+                          part.state === 'input-available' ||
+                          part.state === 'input-streaming'
+                        ) {
+                          return <WebsiteMockup key={i} isLoading />
+                        }
 
-                    return (
-                      <TweetMockup key={i} text={part.data.text}>
-                        <StreamingMessage content={part.data.text} />
-                      </TweetMockup>
-                    )
-                  }
+                        if (part.output) {
+                          return (
+                            <WebsiteMockup
+                              key={i}
+                              url={part.output.url}
+                              title={part.output.title}
+                            >
+                              <div className="line-clamp-3">
+                                <ReactMarkdown>
+                                  {part.output.content.slice(0, 250)}
+                                </ReactMarkdown>
+                              </div>
+                            </WebsiteMockup>
+                          )
+                        }
 
-                  if (part.type === 'text') {
-                    if (!part.text) return null
+                        return null
+                      }
 
-                    return (
-                      <div className="whitespace-pre-wrap" key={i}>
-                        <StreamingMessage
-                          content={message.metadata?.userMessage || part.text}
-                          isStreaming={message.role === 'assistant' && index === messages.length - 1}
-                        />
-                      </div>
-                    )
-                  }
+                      if (part.type === 'data-tool-output') {
+                        if (part.data?.status === 'processing') {
+                          return <TweetMockup key={i} isLoading index={part.data.index || 0} />
+                        }
 
-                  return null
-                })
-              ) : message.content ? (
-                <div className="whitespace-pre-wrap">
-                  <StreamingMessage
-                    content={message.content}
-                    isStreaming={message.role === 'assistant' && index === messages.length - 1}
-                  />
+                        const threads = part.data?.text?.split('---') || []
+
+                        return (
+                          <div
+                            key={`part-${i}`}
+                            className={cn('relative w-full min-w-0 rounded-2xl', {
+                              'border px-3 py-6 border-black border-opacity-[0.01] bg-clip-padding group bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05),0_4px_6px_rgba(34,42,53,0.04),0_24px_68px_rgba(47,48,55,0.05),0_2px_3px_rgba(0,0,0,0.04)]':
+                                threads.length > 1,
+                            })}
+                          >
+                            {threads.map((thread, i) => (
+                              <div key={`part-${i}-thread-${i}`} className="relative">
+                                <TweetMockup
+                                  isConnectedAfter={
+                                    threads.length > 1 && i < threads.length - 1
+                                  }
+                                  isConnectedBefore={i > 0}
+                                  threads={threads}
+                                  text={thread.trim()}
+                                  index={i}
+                                >
+                                  <StreamingMessage animate={true} text={thread.trim()} />
+                                </TweetMockup>
+
+                                {threads.length > 1 && i < threads.length - 1 && (
+                                  <motion.div
+                                    initial={{ height: 0 }}
+                                    animate={{ height: '100%' }}
+                                    transition={{ duration: 0.5 }}
+                                    className="absolute z-10 left-[35px] top-[44px] w-0.5 bg-gray-200/75 h-full"
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      }
+
+                      return null
+                    })}
+                  </MessageWrapper>
                 </div>
-              ) : null}
-            </div>
+              )
+            })}
+
+            {showLoadingMessage && (
+              <div data-message-index={visibleMessages.length} data-loading="true">
+                <LoadingMessage hasImage={hasImageAttachment} status={status} />
+              </div>
+            )}
+          </ChatContainerContent>
+
+          <div className="absolute right-12 bottom-4">
+            <ScrollButton />
           </div>
-        )
-      })}
-
-      {showLoadingMessage && (
-        <div data-message-index={visibleMessages.length} data-loading="true">
-          <LoadingMessage hasAttachments={hasImageAttachment} />
-        </div>
-      )}
-
-      <div ref={messagesEndRef} />
-    </div>
-  )
-})
+        </ChatContainerRoot>
+      </>
+    )
+  },
+)
 
 Messages.displayName = 'Messages'
