@@ -53,6 +53,12 @@ export async function POST(request: NextRequest) {
     console.log(`🔑 [API-UPLOAD] Generated R2 key: "${key}"`)
     console.log(`📋 [API-UPLOAD] Setting ContentType: "${file.type}"`)
     
+    // Sanitize filename for HTTP header - remove/replace invalid characters
+    const sanitizedFilename = file.name
+      .replace(/[^\w\-_.]/g, '-') // Replace non-alphanumeric chars (except dash, underscore, dot) with dash
+      .replace(/-+/g, '-') // Replace multiple consecutive dashes with single dash
+      .replace(/^-|-$/g, '') // Remove leading/trailing dashes
+    
     const command = new PutObjectCommand({
       Bucket: R2_BUCKET_NAME,
       Key: key,
@@ -61,7 +67,7 @@ export async function POST(request: NextRequest) {
       // Add cache control and metadata for better identification
       CacheControl: 'max-age=31536000',
       Metadata: {
-        'original-filename': file.name,
+        'original-filename': sanitizedFilename,
         'upload-timestamp': Date.now().toString(),
         'content-type-original': file.type
       }
