@@ -474,6 +474,12 @@ export const twitterRouter = createTRPCRouter({
           .max(280, 'Tweet exceeds 280 characters'),
         accountId: z.string().optional(),
         mediaIds: z.array(z.string()).optional(),
+        // Thread support
+        isThread: z.boolean().optional(),
+        threadTweets: z.array(z.object({
+          text: z.string().min(1).max(280),
+          mediaIds: z.array(z.string()).optional(),
+        })).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -557,30 +563,119 @@ export const twitterRouter = createTRPCRouter({
       const client = createUserTwitterClient(target.accessToken, target.accessSecret)
 
       try {
-        const params: any = { text: input.text }
-        if (input.mediaIds && input.mediaIds.length > 0) {
-          params.media = { media_ids: input.mediaIds }
-        }
-        
-        console.log('🚀 Posting to Twitter...', { tweetId: storedTweet.id })
-        const result = await client.v2.tweet(params)
-        
-        // Update the stored tweet with Twitter ID and mark as published
-        await db
-          .update(tweets)
-          .set({
-            twitterId: result.data.id,
+        // Handle thread posting
+        if (input.isThread && input.threadTweets && input.threadTweets.length > 0) {
+          console.log('🧵 Posting thread with', input.threadTweets.length + 1, 'tweets...')
+          
+          const threadResults: Array<{ id: string; text: string }> = []
+          let lastTweetId: string | undefined
+          
+          // Post the first tweet (from input.text)
+          const firstParams: any = { text: input.text }
+          if (input.mediaIds && input.mediaIds.length > 0) {
+            firstParams.media = { media_ids: input.mediaIds }
+          }
+          
+          console.log('🚀 Posting first tweet in thread...', { tweetId: storedTweet.id })
+          const firstResult = await client.v2.tweet(firstParams)
+          threadResults.push({ id: firstResult.data.id, text: input.text })
+          lastTweetId = firstResult.data.id
+          
+          // Post remaining tweets in the thread
+          for (let i = 0; i < input.threadTweets.length; i++) {
+            const threadTweet = input.threadTweets[i]
+            const params: any = { 
+              text: threadTweet.text,
+              reply: { in_reply_to_tweet_id: lastTweetId }
+            }
+            
+            if (threadTweet.mediaIds && threadTweet.mediaIds.length > 0) {
+              params.media = { media_ids: threadTweet.mediaIds }
+            }
+            
+            console.log(`🚀 Posting thread tweet ${i + 2}/${input.threadTweets.length + 1}...`)
+            const result = await client.v2.tweet(params)
+            threadResults.push({ id: result.data.id, text: threadTweet.text })
+            lastTweetId = result.data.id
+          }
+          
+          // Store additional thread tweets in database
+          const threadTweetInserts = threadResults.slice(1).map((tweet, index) => ({
+            id: crypto.randomUUID(),
+            userId: ctx.user.id,
+            accountId: target.id,
+            content: tweet.text,
+            mediaIds: input.threadTweets![index]?.mediaIds || [],
+            isScheduled: false,
             isPublished: true,
-            updatedAt: new Date(),
+            twitterId: tweet.id,
+            // Mark as part of a thread with reference to the first tweet
+            metadata: { 
+              threadId: firstResult.data.id, 
+              threadPosition: index + 2, 
+              threadTotal: threadResults.length 
+            },
+          }))
+          
+          if (threadTweetInserts.length > 0) {
+            await db.insert(tweets).values(threadTweetInserts)
+          }
+          
+          // Update the first tweet with Twitter ID and thread metadata
+          await db
+            .update(tweets)
+            .set({
+              twitterId: firstResult.data.id,
+              isPublished: true,
+              updatedAt: new Date(),
+              metadata: { 
+                threadId: firstResult.data.id, 
+                threadPosition: 1, 
+                threadTotal: threadResults.length 
+              },
+            })
+            .where(eq(tweets.id, storedTweet.id))
+
+          console.log('✅ Thread posted successfully:', {
+            threadId: firstResult.data.id,
+            totalTweets: threadResults.length,
+            tweetIds: threadResults.map(t => t.id),
           })
-          .where(eq(tweets.id, storedTweet.id))
 
-        console.log('✅ Tweet posted and database updated:', {
-          tweetId: storedTweet.id,
-          twitterId: result.data.id,
-        })
+          return { 
+            success: true, 
+            tweetId: firstResult.data.id, 
+            storedTweetId: storedTweet.id,
+            isThread: true,
+            threadResults: threadResults.map(t => ({ twitterId: t.id, text: t.text }))
+          }
+        } else {
+          // Single tweet posting (existing logic)
+          const params: any = { text: input.text }
+          if (input.mediaIds && input.mediaIds.length > 0) {
+            params.media = { media_ids: input.mediaIds }
+          }
+          
+          console.log('🚀 Posting single tweet...', { tweetId: storedTweet.id })
+          const result = await client.v2.tweet(params)
+          
+          // Update the stored tweet with Twitter ID and mark as published
+          await db
+            .update(tweets)
+            .set({
+              twitterId: result.data.id,
+              isPublished: true,
+              updatedAt: new Date(),
+            })
+            .where(eq(tweets.id, storedTweet.id))
 
-        return { success: true, tweetId: result.data.id, storedTweetId: storedTweet.id }
+          console.log('✅ Tweet posted and database updated:', {
+            tweetId: storedTweet.id,
+            twitterId: result.data.id,
+          })
+
+          return { success: true, tweetId: result.data.id, storedTweetId: storedTweet.id }
+        }
       } catch (e: any) {
         // eslint-disable-next-line no-console
         console.error('Tweet failed', e)
