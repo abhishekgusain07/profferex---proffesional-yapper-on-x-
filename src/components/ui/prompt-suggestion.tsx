@@ -10,6 +10,10 @@ export type PromptSuggestionProps = {
   size?: VariantProps<typeof buttonVariants>["size"]
   className?: string
   highlight?: string
+  icon?: React.ReactNode
+  // Thread-aware props
+  isThreadSuggestion?: boolean
+  category?: 'thread' | 'tweet' | 'general'
 } & React.ButtonHTMLAttributes<HTMLButtonElement>
 
 function PromptSuggestion({
@@ -18,20 +22,40 @@ function PromptSuggestion({
   size,
   className,
   highlight,
+  icon,
+  isThreadSuggestion = false,
+  category = 'general',
   ...props
 }: PromptSuggestionProps) {
   const isHighlightMode = highlight !== undefined && highlight.trim() !== ""
   const content = typeof children === "string" ? children : ""
 
+  // Enhanced contentport-style suggestions
+  const getDefaultStyling = () => {
+    if (category === 'thread') {
+      return "border-blue-200 bg-blue-50/50 hover:bg-blue-100/80 hover:border-blue-300 text-blue-800"
+    }
+    if (category === 'tweet') {
+      return "border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-700"
+    }
+    return "border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-700"
+  }
+
   if (!isHighlightMode) {
     return (
       <Button
         variant={variant || "outline"}
-        size={size || "lg"}
-        className={cn("rounded-full", className)}
+        size={size || "sm"}
+        className={cn(
+          "w-full justify-start gap-2 rounded-xl p-3 h-auto text-left font-normal transition-all duration-200",
+          getDefaultStyling(),
+          isThreadSuggestion && "ring-1 ring-blue-200/50",
+          className
+        )}
         {...props}
       >
-        {children}
+        {icon && <span className="flex-shrink-0">{icon}</span>}
+        <span className="flex-1 text-sm leading-relaxed">{children}</span>
       </Button>
     )
   }
@@ -42,13 +66,15 @@ function PromptSuggestion({
         variant={variant || "ghost"}
         size={size || "sm"}
         className={cn(
-          "w-full cursor-pointer justify-start rounded-xl py-2",
-          "hover:bg-accent",
+          "w-full cursor-pointer justify-start gap-2 rounded-xl p-3 h-auto text-left font-normal",
+          "hover:bg-accent transition-all duration-200",
+          getDefaultStyling(),
           className
         )}
         {...props}
       >
-        {children}
+        {icon && <span className="flex-shrink-0">{icon}</span>}
+        <span className="flex-1">{children}</span>
       </Button>
     )
   }
@@ -63,13 +89,16 @@ function PromptSuggestion({
       variant={variant || "ghost"}
       size={size || "sm"}
       className={cn(
-        "w-full cursor-pointer justify-start gap-0 rounded-xl py-2",
-        "hover:bg-accent",
+        "w-full cursor-pointer justify-start gap-2 rounded-xl p-3 h-auto text-left font-normal",
+        "hover:bg-accent transition-all duration-200",
+        getDefaultStyling(),
         className
       )}
       {...props}
     >
-      {shouldHighlight ? (
+      {icon && <span className="flex-shrink-0">{icon}</span>}
+      <span className="flex-1">
+        {shouldHighlight ? (
         (() => {
           const index = contentLower.indexOf(highlightLower)
           if (index === -1)
@@ -105,11 +134,12 @@ function PromptSuggestion({
             </>
           )
         })()
-      ) : (
-        <span className="text-muted-foreground whitespace-pre-wrap">
-          {content}
-        </span>
-      )}
+        ) : (
+          <span className="text-muted-foreground whitespace-pre-wrap">
+            {content}
+          </span>
+        )}
+      </span>
     </Button>
   )
 }

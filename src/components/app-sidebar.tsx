@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowUp, History, Paperclip, Plus, Square, X } from 'lucide-react'
+import { ArrowUp, History, Paperclip, Plus, Square, X, Zap, MessageSquare, Twitter, TrendingUp, Target, Sparkles } from 'lucide-react'
 import { useCallback, useContext, useEffect, useState } from 'react'
 import { trpc } from '@/trpc/client'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
@@ -69,8 +69,14 @@ const ChatInput2 = ({
   const { isDragging } = useContext(FileUploadContext)
   const [hasText, setHasText] = useState(false)
 
-  const { attachments, removeAttachment, addKnowledgeAttachment, hasUploading } =
-    useAttachments()
+  const { 
+    attachments, 
+    removeAttachment, 
+    addKnowledgeAttachment, 
+    hasUploading,
+    hasImageAttachments,
+    getThreadRelevantAttachments 
+  } = useAttachments()
 
   const handleSubmit = () => {
     const text = editor.read(() => $getRoot().getTextContent().trim())
@@ -248,7 +254,7 @@ const ChatInput2 = ({
                 }
                 ErrorBoundary={LexicalErrorBoundary}
               />
-              <PlaceholderPlugin placeholder="Tweet about..." />
+              <PlaceholderPlugin placeholder="Ask to generate threads or tweets..." />
               <HistoryPlugin />
 
               <div className="flex items-center justify-between px-3 pb-3">
@@ -259,7 +265,14 @@ const ChatInput2 = ({
                     </Button>
                   </FileUploadTrigger>
 
-                  <KnowledgeSelector onSelectDocument={handleAddKnowledgeDoc} />
+                  <KnowledgeSelector 
+                    onSelectDocument={handleAddKnowledgeDoc}
+                    threadContext={{
+                      isGeneratingThread: true,
+                      currentTopic: editor.read(() => $getRoot().getTextContent().trim()),
+                      preferredTypes: ['txt', 'pdf', 'url']
+                    }}
+                  />
                 </div>
 
                 {disabled ? (
@@ -542,41 +555,33 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
       {children}
 
       <Sidebar side="right" collapsible="offcanvas">
-        <SidebarHeader className="flex flex-col border-b border-stone-200 bg-stone-100 items-center justify-end gap-2 px-4">
+        <SidebarHeader className="flex flex-col border-b border-gray-200 bg-white items-center justify-end gap-3 px-4 py-4">
+          {/* Enhanced header with thread context */}
           <div className="w-full flex items-center justify-between">
-            <p className="text-sm/6 font-medium">Assistant</p>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-sm">
+                <MessageSquare className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">AI Assistant</p>
+                <p className="text-xs text-gray-500">Thread & Tweet Generator</p>
+              </div>
+            </div>
+            <div className="flex gap-1">
               <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={handleNewChat}
-                      size="sm"
-                      variant="secondary"
-                      className="inline-flex items-center gap-1.5"
-                    >
-                      <Plus className="size-4" />
-                      <p className="text-sm">New Chat</p>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Start a new conversation</p>
-                  </TooltipContent>
-                </Tooltip>
-
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       onClick={() => setIsHistoryOpen(true)}
                       size="icon"
-                      variant="secondary"
-                      className="aspect-square"
+                      variant="ghost"
+                      className="w-8 h-8"
                     >
                       <History className="size-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Open chat history</p>
+                    <p>Chat history</p>
                   </TooltipContent>
                 </Tooltip>
 
@@ -584,57 +589,108 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
                   <TooltipTrigger asChild>
                     <Button
                       onClick={toggleSidebar}
-                      variant="secondary"
-                      className="aspect-square"
+                      variant="ghost"
                       size="icon"
+                      className="w-8 h-8"
                     >
                       <X className="size-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Close sidebar</p>
+                    <p>Close assistant</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
           </div>
+
+          {/* Thread generation quick actions */}
+          <div className="w-full grid grid-cols-2 gap-2">
+            <Button
+              onClick={handleNewChat}
+              size="sm"
+              variant="outline"
+              className="h-9 gap-1.5 text-xs"
+            >
+              <Plus className="size-3" />
+              New Chat
+            </Button>
+            <Button
+              onClick={() => {
+                handleSubmit('Generate a Twitter thread about the latest trends in AI and technology')
+              }}
+              size="sm"
+              variant="default"
+              className="h-9 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700"
+            >
+              <Zap className="size-3" />
+              Generate Thread
+            </Button>
+          </div>
         </SidebarHeader>
-        <SidebarContent className="relative h-full py-0 bg-gray-50 bg-opacity-25">
+        <SidebarContent className="relative h-full py-0 bg-gray-50/30">
           {messages.length === 0 ? (
-            <div className="absolute z-10 p-3 pb-5 inset-x-0 bottom-0">
-              <p className="text-sm text-gray-500 mb-2">Examples</p>
-              <div className="space-y-2">
-                <PromptSuggestion
-                  onClick={() => {
-                    handleSubmit('Help me create a viral tweet about productivity tips for remote workers')
-                  }}
-                >
-                  Create a viral tweet about productivity tips
-                </PromptSuggestion>
+            <div className="absolute z-10 p-4 pb-5 inset-x-0 bottom-0">
+              {/* Thread-focused examples */}
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="size-4 text-blue-600" />
+                    <p className="text-sm font-medium text-gray-900">Thread Ideas</p>
+                  </div>
+                  <div className="space-y-2">
+                    <PromptSuggestion
+                      onClick={() => {
+                        handleSubmit('Create a Twitter thread about the future of AI and its impact on different industries')
+                      }}
+                      icon={<TrendingUp className="size-3" />}
+                    >
+                      AI's impact on industries
+                    </PromptSuggestion>
 
-                <PromptSuggestion
-                  onClick={() => {
-                    handleSubmit('Write a Twitter thread explaining AI in simple terms for beginners')
-                  }}
-                >
-                  Write a Twitter thread about AI for beginners
-                </PromptSuggestion>
+                    <PromptSuggestion
+                      onClick={() => {
+                        handleSubmit('Generate a thread about productivity hacks for remote workers with actionable tips')
+                      }}
+                      icon={<Target className="size-3" />}
+                    >
+                      Remote productivity hacks
+                    </PromptSuggestion>
 
-                <PromptSuggestion
-                  onClick={() => {
-                    handleSubmit('Help me craft a tweet about overcoming imposter syndrome in tech')
-                  }}
-                >
-                  Tweet about overcoming imposter syndrome
-                </PromptSuggestion>
+                    <PromptSuggestion
+                      onClick={() => {
+                        handleSubmit('Write a thread about building a personal brand on social media step by step')
+                      }}
+                      icon={<Sparkles className="size-3" />}
+                    >
+                      Personal branding guide
+                    </PromptSuggestion>
+                  </div>
+                </div>
 
-                <PromptSuggestion
-                  onClick={() => {
-                    handleSubmit('Suggest tweets about the latest trends in web development')
-                  }}
-                >
-                  Tweet about web development trends
-                </PromptSuggestion>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Twitter className="size-4 text-blue-500" />
+                    <p className="text-sm font-medium text-gray-900">Single Tweets</p>
+                  </div>
+                  <div className="space-y-2">
+                    <PromptSuggestion
+                      onClick={() => {
+                        handleSubmit('Create a viral tweet about overcoming imposter syndrome in tech')
+                      }}
+                    >
+                      Imposter syndrome advice
+                    </PromptSuggestion>
+
+                    <PromptSuggestion
+                      onClick={() => {
+                        handleSubmit('Write an engaging tweet about the latest web development trends')
+                      }}
+                    >
+                      Web dev trends
+                    </PromptSuggestion>
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
@@ -646,7 +702,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="relative p-3 border-t border-t-gray-300 bg-gray-100">
+        <SidebarFooter className="relative p-4 border-t border-gray-200 bg-white">
           <FileUpload onFilesAdded={handleFilesAdded}>
             <ChatInput2
               onStop={stop}
@@ -661,55 +717,72 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
       <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
         <DialogContent className="bg-white rounded-2xl p-6 max-w-2xl max-h-[80vh] overflow-hidden">
-          <div className="size-12 bg-gray-100 rounded-full flex items-center justify-center">
-            <History className="size-6" />
+          <div className="flex items-center gap-3">
+            <div className="size-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+              <History className="size-6 text-white" />
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-semibold leading-6 text-gray-900">
+                Chat History
+              </DialogTitle>
+              <DialogDescription className="text-sm text-gray-500">
+                {isHistoryPending
+                  ? 'Loading conversations...'
+                  : chatConversations?.chatHistory?.length
+                    ? `${chatConversations?.chatHistory?.length} conversation${chatConversations?.chatHistory?.length === 1 ? '' : 's'}`
+                    : 'No conversations yet'}
+              </DialogDescription>
+            </div>
           </div>
-          <DialogHeader className="py-2">
-            <DialogTitle className="text-lg font-semibold leading-6">
-              Chat History
-            </DialogTitle>
-            <DialogDescription className="leading-none">
-              {isHistoryPending
-                ? 'Loading...'
-                : chatConversations?.chatHistory?.length
-                  ? `Showing ${chatConversations?.chatHistory?.length} most recent chats`
-                  : 'No chat history yet'}
-            </DialogDescription>
-          </DialogHeader>
 
-          {
-            <div className="overflow-y-auto max-h-[60vh] -mx-2 px-2">
-              <div className="space-y-2">
-                {chatConversations?.chatHistory?.length ? (
-                  chatConversations.chatHistory.map((chat) => (
-                    <button
-                      key={chat.id}
-                      onClick={() => handleChatSelect(chat.id)}
-                      className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-sm text-gray-900 truncate">
+          <div className="overflow-y-auto max-h-[60vh] -mx-2 px-2 mt-4">
+            <div className="space-y-2">
+              {chatConversations?.chatHistory?.length ? (
+                chatConversations.chatHistory.map((chat) => (
+                  <button
+                    key={chat.id}
+                    onClick={() => handleChatSelect(chat.id)}
+                    className="w-full text-left p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all duration-200 group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-medium text-sm text-gray-900 truncate group-hover:text-blue-900">
                             {chat.title}
                           </h3>
+                          {/* Thread indicator */}
+                          {chat.lastMessage?.includes('---') && (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                              <Zap className="size-2" />
+                              Thread
+                            </div>
+                          )}
                         </div>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">
-                          {formatDistanceToNow(new Date(chat.lastUpdated), {
-                            addSuffix: true,
-                          })}
-                        </span>
+                        {chat.lastMessage && (
+                          <p className="text-xs text-gray-500 line-clamp-1 leading-relaxed">
+                            {chat.lastMessage.slice(0, 80)}{chat.lastMessage.length > 80 ? '...' : ''}
+                          </p>
+                        )}
                       </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <p className="text-sm">No chat history yet</p>
-                    <p className="text-xs mt-1">Start a conversation to see it here</p>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">
+                        {formatDistanceToNow(new Date(chat.lastUpdated), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <MessageSquare className="size-8 text-gray-400" />
                   </div>
-                )}
-              </div>
+                  <p className="text-gray-600 font-medium mb-1">No conversations yet</p>
+                  <p className="text-sm text-gray-500">Start chatting to generate threads and tweets</p>
+                </div>
+              )}
             </div>
-          }
+          </div>
         </DialogContent>
       </Dialog>
     </>

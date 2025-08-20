@@ -9,7 +9,10 @@ import {
   FileIcon, 
   Link, 
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Brain,
+  CheckCircle
 } from 'lucide-react'
 import type { Attachment } from '@/types/chat'
 import { useAttachments } from '@/hooks/use-attachments'
@@ -22,6 +25,28 @@ interface AttachmentItemProps {
   attachment: Attachment
   index: number
   onRemove?: () => void
+  // Thread context for enhanced display
+  isInThreadContext?: boolean
+  showThreadOptimization?: boolean
+}
+
+// Check if attachment is optimal for thread generation
+function isThreadOptimal(type: Attachment['type']) {
+  return ['txt', 'pdf', 'url', 'image'].includes(type)
+}
+
+// Get thread relevance score (simple heuristic)
+function getThreadRelevanceScore(attachment: Attachment) {
+  const typeScores = {
+    'txt': 10,
+    'pdf': 8,
+    'url': 9,
+    'image': 6,
+    'docx': 5,
+    'video': 3,
+    'manual': 2
+  }
+  return typeScores[attachment.type] || 0
 }
 
 // Get icon based on attachment type
@@ -44,64 +69,84 @@ function getAttachmentIcon(type: Attachment['type']) {
 }
 
 // Get color scheme based on attachment type
-function getColorScheme(type: Attachment['type']) {
-  switch (type) {
-    case 'image':
-      return {
-        bg: 'bg-green-50',
-        border: 'border-green-200',
-        text: 'text-green-700',
-        icon: 'text-green-500'
-      }
-    case 'video':
-      return {
-        bg: 'bg-purple-50',
-        border: 'border-purple-200',
-        text: 'text-purple-700',
-        icon: 'text-purple-500'
-      }
-    case 'pdf':
-      return {
-        bg: 'bg-red-50',
-        border: 'border-red-200',
-        text: 'text-red-700',
-        icon: 'text-red-500'
-      }
-    case 'docx':
-      return {
-        bg: 'bg-blue-50',
-        border: 'border-blue-200',
-        text: 'text-blue-700',
-        icon: 'text-blue-500'
-      }
-    case 'txt':
-      return {
-        bg: 'bg-gray-50',
-        border: 'border-gray-200',
-        text: 'text-gray-700',
-        icon: 'text-gray-500'
-      }
-    case 'url':
-      return {
-        bg: 'bg-indigo-50',
-        border: 'border-indigo-200',
-        text: 'text-indigo-700',
-        icon: 'text-indigo-500'
-      }
-    default:
-      return {
-        bg: 'bg-gray-50',
-        border: 'border-gray-200',
-        text: 'text-gray-700',
-        icon: 'text-gray-500'
-      }
+function getColorScheme(type: Attachment['type'], isThreadOptimal: boolean = false) {
+  const baseScheme = (() => {
+    switch (type) {
+      case 'image':
+        return {
+          bg: 'bg-green-50',
+          border: 'border-green-200',
+          text: 'text-green-700',
+          icon: 'text-green-500'
+        }
+      case 'video':
+        return {
+          bg: 'bg-purple-50',
+          border: 'border-purple-200',
+          text: 'text-purple-700',
+          icon: 'text-purple-500'
+        }
+      case 'pdf':
+        return {
+          bg: 'bg-red-50',
+          border: 'border-red-200',
+          text: 'text-red-700',
+          icon: 'text-red-500'
+        }
+      case 'docx':
+        return {
+          bg: 'bg-blue-50',
+          border: 'border-blue-200',
+          text: 'text-blue-700',
+          icon: 'text-blue-500'
+        }
+      case 'txt':
+        return {
+          bg: 'bg-gray-50',
+          border: 'border-gray-200',
+          text: 'text-gray-700',
+          icon: 'text-gray-500'
+        }
+      case 'url':
+        return {
+          bg: 'bg-indigo-50',
+          border: 'border-indigo-200',
+          text: 'text-indigo-700',
+          icon: 'text-indigo-500'
+        }
+      default:
+        return {
+          bg: 'bg-gray-50',
+          border: 'border-gray-200',
+          text: 'text-gray-700',
+          icon: 'text-gray-500'
+        }
+    }
+  })()
+
+  // Enhance colors for thread-optimal attachments
+  if (isThreadOptimal) {
+    return {
+      ...baseScheme,
+      bg: baseScheme.bg.replace('-50', '-100/50'),
+      border: baseScheme.border.replace('-200', '-300'),
+    }
   }
+
+  return baseScheme
 }
 
-export function AttachmentItem({ attachment, index }: AttachmentItemProps) {
+export function AttachmentItem({ 
+  attachment, 
+  index, 
+  isInThreadContext = false, 
+  showThreadOptimization = false 
+}: AttachmentItemProps) {
   const { removeAttachment } = useAttachments()
   const Icon = getAttachmentIcon(attachment.type)
-  const colors = getColorScheme(attachment.type)
+  const isOptimal = isThreadOptimal(attachment.type)
+  const relevanceScore = getThreadRelevanceScore(attachment)
+  const colors = getColorScheme(attachment.type, isOptimal && isInThreadContext)
 
   const isUploading = (attachment as any).variant === 'chat' && (attachment as any).isUploading
   const hasError = (attachment as any).variant === 'chat' && (attachment as any).error
@@ -164,12 +209,36 @@ export function AttachmentItem({ attachment, index }: AttachmentItemProps) {
           </div>
         )}
 
-        {/* File type indicator */}
+        {/* File type indicator with thread optimization */}
         {!isUploading && !hasError && (
-          <div className={cn('text-xs opacity-75', colors.text)}>
-            {attachment.type.toUpperCase()}
-            {(attachment as any).variant === 'knowledge' && ' • Knowledge'}
-            {(attachment as any).variant === 'chat' && ' • Uploaded'}
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className={cn('opacity-75', colors.text)}>
+              {attachment.type.toUpperCase()}
+              {(attachment as any).variant === 'knowledge' && ' • Knowledge'}
+              {(attachment as any).variant === 'chat' && ' • Uploaded'}
+            </span>
+            
+            {/* Thread optimization indicators */}
+            {showThreadOptimization && isOptimal && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                <Zap className="w-2 h-2" />
+                <span className="font-medium">Thread Ready</span>
+              </div>
+            )}
+            
+            {showThreadOptimization && relevanceScore >= 8 && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full">
+                <CheckCircle className="w-2 h-2" />
+                <span className="font-medium">High Relevance</span>
+              </div>
+            )}
+            
+            {(attachment as any).variant === 'knowledge' && showThreadOptimization && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                <Brain className="w-2 h-2" />
+                <span className="font-medium">Context</span>
+              </div>
+            )}
           </div>
         )}
       </div>
