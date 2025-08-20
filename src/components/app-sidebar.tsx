@@ -254,7 +254,12 @@ const ChatInput2 = ({
                 }
                 ErrorBoundary={LexicalErrorBoundary}
               />
-              <PlaceholderPlugin placeholder="Ask to generate threads or tweets..." />
+              <PlaceholderPlugin 
+                placeholder="Ask to generate threads or tweets..." 
+                threadOptimized={true}
+                showHints={true}
+                className="text-gray-400"
+              />
               <HistoryPlugin />
 
               <div className="flex items-center justify-between px-3 pb-3">
