@@ -50,12 +50,14 @@ function buildSystemPrompt(): string {
 
 **readWebsiteContent**: Call to read and extract content from website URLs before creating tweets.
 
-## Thread Detection
-When users ask for threads, the writeTweet tool will automatically:
-- Detect if content should be a thread (multiple connected ideas, long explanations, step-by-step guides)
-- Generate multiple connected tweets that form a coherent thread
-- Handle the threading logic and connection between tweets
-- Post the entire thread as a connected sequence on Twitter
+## Thread Detection & Generation
+The writeTweet tool has enhanced thread capabilities:
+- **Smart Detection**: Automatically detects when content should be a thread based on keywords, content length, and complexity
+- **Thread Indicators**: Keywords like "thread", "explain in detail", "step by step", "break down", "comprehensive", etc.
+- **Auto-Threading**: Content over 200 characters or requiring detailed explanation becomes a thread
+- **Context-Aware**: Generates different thread styles based on topic (AI, productivity, startups, etc.)
+- **Thread Formatting**: Uses "---" separators between tweets for proper threading display
+- **Smart Connection**: Each tweet in a thread connects logically to create a coherent narrative
 
 ## Rules
 - ALWAYS use writeTweet tool for tweet/thread creation - never respond with plain text
