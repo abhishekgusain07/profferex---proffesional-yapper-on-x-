@@ -356,7 +356,7 @@ export function useFileHandler() {
     e.stopPropagation()
     
     const files = Array.from(e.dataTransfer.files)
-    files.forEach(addChatAttachment)
+    files.forEach(file => addChatAttachment(file))
   }, [addChatAttachment])
 
   // Handle paste event
@@ -370,14 +370,14 @@ export function useFileHandler() {
     
     if (files.length > 0) {
       e.preventDefault()
-      files.forEach(addChatAttachment)
+      files.forEach(file => addChatAttachment(file))
     }
   }, [addChatAttachment])
 
   // Handle file input change
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    files.forEach(addChatAttachment)
+    files.forEach(file => addChatAttachment(file))
     
     // Reset input value
     e.target.value = ''

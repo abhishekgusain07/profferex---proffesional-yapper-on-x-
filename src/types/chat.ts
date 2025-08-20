@@ -15,6 +15,10 @@ export interface ChatAttachment extends BaseAttachment {
   uploadProgress?: number
   isUploading?: boolean
   error?: string
+  // Enhanced properties for thread support
+  size?: number
+  threadContext?: { isThreadGeneration?: boolean; threadId?: string }
+  uploadStartTime?: number
 }
 
 export interface KnowledgeAttachment extends BaseAttachment {
