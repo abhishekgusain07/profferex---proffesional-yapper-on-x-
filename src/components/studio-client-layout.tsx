@@ -13,10 +13,6 @@ interface LayoutProps extends PropsWithChildren {
   hideAppSidebar?: boolean
   width: any
   state: any
-  initialTwitterData?: {
-    accounts?: any[] | null
-    activeAccount?: any | null
-  } | null
   // Enhanced layout options for contentport-style dual sidebars
   leftSidebarCollapsed?: boolean
   rightSidebarWidth?: string
@@ -56,7 +52,6 @@ export default function StudioClientLayout({
   width,
   state,
   hideAppSidebar,
-  initialTwitterData,
   leftSidebarCollapsed = false,
   rightSidebarWidth,
   enableResponsiveLayout = true,
@@ -70,7 +65,7 @@ export default function StudioClientLayout({
   const finalWidth = rightSidebarWidth || width?.value || '28rem'
 
   return (
-    <DashboardProviders initialTwitterData={initialTwitterData}>
+    <DashboardProviders>
       {/* Enhanced contentport-style layout with proper sidebar management */}
       <div className="flex min-h-screen bg-gray-50/30">
         {/* Left Sidebar - Navigation */}

@@ -2,7 +2,6 @@
 
 import { trpc } from '@/trpc/client'
 import { useSession } from '@/lib/auth-client'
-import { useTwitterData } from '@/providers/twitter-data-provider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -49,7 +48,10 @@ const TweetCard = ({ name, username, src, text }: TweetCardProps) => {
 
 const AccountsPage = () => {
   const { data: session, isPending: sessionLoading } = useSession()
-  const { accounts: twitterAccounts, activeAccount, isLoading: twitterDataLoading } = useTwitterData()
+  // Direct tRPC queries for progressive loading
+  const { data: twitterAccounts, isLoading: accountsLoading } = trpc.twitter.getAccounts.useQuery()
+  const { data: activeAccount, isLoading: activeAccountLoading } = trpc.twitter.getActiveAccount.useQuery()
+  const twitterDataLoading = accountsLoading || activeAccountLoading
   const [connectingTwitter, setConnectingTwitter] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [accountToDelete, setAccountToDelete] = useState<{ id: string; name: string } | null>(null)
