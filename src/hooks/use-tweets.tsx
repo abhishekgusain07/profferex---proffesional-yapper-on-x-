@@ -179,50 +179,85 @@ export function TweetProvider({ children }: PropsWithChildren) {
   }
 
   const resetTweets = async () => {
-    // Clear editor content for all existing tweets
-    await Promise.all(
-      tweets.map(async (tweet) => {
-        if (tweet.editor) {
-          await new Promise<void>((resolve) => {
-            tweet.editor.update(
-              () => {
-                const root = $getRoot()
-                root.clear()
-                const paragraph = $createParagraphNode()
-                root.append(paragraph)
-              },
-              { onUpdate: resolve, tag: 'force-sync' },
-            )
-          })
+    try {
+      // Set a reasonable timeout for operations
+      const OPERATION_TIMEOUT = 3000 // 3 seconds
+      
+      // Clear editor content for all existing tweets with timeout
+      const clearPromises = tweets.map(async (tweet) => {
+        if (tweet.editor && tweet.editor.isEditable()) {
+          return Promise.race([
+            new Promise<void>((resolve, reject) => {
+              tweet.editor.update(
+                () => {
+                  const root = $getRoot()
+                  root.clear()
+                  const paragraph = $createParagraphNode()
+                  root.append(paragraph)
+                },
+                { 
+                  onUpdate: resolve,
+                  tag: 'reset-operation'
+                },
+              )
+            }),
+            new Promise<void>((_, reject) => {
+              setTimeout(() => reject(new Error('Clear timeout')), OPERATION_TIMEOUT)
+            })
+          ])
         }
+        return Promise.resolve()
       })
-    )
 
-    // Create a new tweet with fresh editor
-    const newTweetId = nanoid()
-    const newEditor = createEditor({ ...initialConfig })
-    
-    // Initialize the new editor with empty paragraph
-    await new Promise<void>((resolve) => {
-      newEditor.update(
-        () => {
-          const root = $getRoot()
-          const paragraph = $createParagraphNode()
-          root.append(paragraph)
-        },
-        { onUpdate: resolve, tag: 'force-sync' },
-      )
-    })
+      await Promise.all(clearPromises)
 
-    setTweets([
-      {
-        id: newTweetId,
-        content: '',
-        mediaIds: [],
-        index: 0,
-        editor: newEditor,
-      }
-    ])
+      // Create a new tweet with fresh editor
+      const newTweetId = nanoid()
+      const newEditor = createEditor({ ...initialConfig })
+      
+      // Initialize the new editor with timeout
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          newEditor.update(
+            () => {
+              const root = $getRoot()
+              const paragraph = $createParagraphNode()
+              root.append(paragraph)
+            },
+            { 
+              onUpdate: resolve,
+              tag: 'reset-operation'
+            },
+          )
+        }),
+        new Promise<void>((_, reject) => {
+          setTimeout(() => reject(new Error('Init timeout')), OPERATION_TIMEOUT)
+        })
+      ])
+
+      setTweets([
+        {
+          id: newTweetId,
+          content: '',
+          mediaIds: [],
+          index: 0,
+          editor: newEditor,
+        }
+      ])
+    } catch (error) {
+      console.error('Reset operation failed:', error)
+      // Fallback: Create new tweet without complex operations
+      const fallbackTweetId = nanoid()
+      setTweets([
+        {
+          id: fallbackTweetId,
+          content: '',
+          mediaIds: [],
+          index: 0,
+          editor: createEditor({ ...initialConfig }),
+        }
+      ])
+    }
   }
 
   return (

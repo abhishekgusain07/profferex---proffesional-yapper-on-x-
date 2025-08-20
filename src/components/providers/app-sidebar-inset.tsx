@@ -30,10 +30,17 @@ export function AppSidebarInset({ children }: { children: React.ReactNode }) {
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false)
 
   const postNowMutation = trpc.twitter.postNow.useMutation({
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success('Tweet posted successfully!')
       setIsPostDialogOpen(false)
-      await resetTweets() // Clear tweets after successful posting
+      // Use setTimeout to prevent blocking the success callback and avoid cascading renders
+      setTimeout(() => {
+        resetTweets().catch((error) => {
+          console.error('Reset failed after post:', error)
+          // Fallback: just reload the page if reset fails
+          window.location.reload()
+        })
+      }, 0)
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to post tweet')
@@ -41,10 +48,17 @@ export function AppSidebarInset({ children }: { children: React.ReactNode }) {
   })
 
   const scheduleMutation = trpc.twitter.schedule.useMutation({
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success('Tweet scheduled successfully!')
       setIsScheduleDialogOpen(false)
-      await resetTweets() // Clear tweets after successful scheduling
+      // Use setTimeout to prevent blocking the success callback and avoid cascading renders
+      setTimeout(() => {
+        resetTweets().catch((error) => {
+          console.error('Reset failed after schedule:', error)
+          // Fallback: just reload the page if reset fails
+          window.location.reload()
+        })
+      }, 0)
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to schedule tweet')

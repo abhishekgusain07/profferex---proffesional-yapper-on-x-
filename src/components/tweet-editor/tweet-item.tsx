@@ -86,8 +86,8 @@ function SyncWithTweetPlugin({ tweet }: { tweet: Tweet }) {
   useEffect(() => {
     if (tweet.editor) {
       const unregisterListener = tweet.editor.registerUpdateListener(({ editorState, tags }) => {
-        // Only sync if the update comes from the tweet's shadow editor (apply button)
-        if (tags.has('force-sync')) {
+        // Only sync if the update comes from the tweet's shadow editor
+        if (tags.has('force-sync') || tags.has('reset-operation')) {
           editorState.read(() => {
             const root = $getRoot()
             const textContent = root.getTextContent()
@@ -95,37 +95,50 @@ function SyncWithTweetPlugin({ tweet }: { tweet: Tweet }) {
             // Update the main editor
             editor.update(() => {
               const mainRoot = $getRoot()
-              const paragraph = $createParagraphNode()
-              const textNode = $createTextNode(textContent)
+              const currentContent = mainRoot.getTextContent()
               
-              mainRoot.clear()
-              paragraph.append(textNode)
-              mainRoot.append(paragraph)
+              // Only update if content actually differs to prevent loops
+              if (currentContent !== textContent) {
+                const paragraph = $createParagraphNode()
+                const textNode = $createTextNode(textContent)
+                
+                mainRoot.clear()
+                paragraph.append(textNode)
+                mainRoot.append(paragraph)
+              }
             })
           })
         }
       })
 
-      return () => {
-        unregisterListener()
-      }
+      return unregisterListener // Direct return for cleanup
     }
-  }, [editor, tweet.editor])
+  }, [tweet.editor]) // Remove editor from dependencies to prevent re-runs
 
-  // Initial sync of content
+  // Initial sync of content with debouncing
   useEffect(() => {
-    if (tweet.content) {
-      editor.update(() => {
-        const root = $getRoot()
-        const paragraph = $createParagraphNode()
-        const textNode = $createTextNode(tweet.content)
-        
-        root.clear()
-        paragraph.append(textNode)
-        root.append(paragraph)
-      })
+    if (tweet.content && editor) {
+      // Debounce the update to prevent rapid re-renders
+      const timeoutId = setTimeout(() => {
+        editor.update(() => {
+          const root = $getRoot()
+          const currentContent = root.getTextContent()
+          
+          // Only update if content actually differs
+          if (currentContent !== tweet.content) {
+            const paragraph = $createParagraphNode()
+            const textNode = $createTextNode(tweet.content)
+            
+            root.clear()
+            paragraph.append(textNode)
+            root.append(paragraph)
+          }
+        })
+      }, 100) // 100ms debounce
+
+      return () => clearTimeout(timeoutId)
     }
-  }, [editor, tweet.content])
+  }, [tweet.content]) // Remove editor from dependencies
 
   return null
 }
