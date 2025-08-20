@@ -92,7 +92,16 @@ export function TweetProvider({ children }: PropsWithChildren) {
   const [charCount, setCharCount] = useState(0)
   
   // Thread state management
-  const [tweets, setTweets] = useState<Tweet[]>([])
+  const initialTweetId = useRef(nanoid())
+  const [tweets, setTweets] = useState<Tweet[]>([
+    {
+      id: initialTweetId.current,
+      content: '',
+      mediaIds: [],
+      index: 0,
+      editor: createEditor({ ...initialConfig }),
+    }
+  ])
 
   const shadowEditorRef = useRef(createEditor({ ...initialConfig }))
   const shadowEditor = shadowEditorRef.current
