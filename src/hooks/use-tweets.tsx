@@ -31,6 +31,7 @@ export const initialConfig = {
 }
 
 interface TweetContextType {
+  // Single tweet support (existing)
   currentTweet: { id: string; content: string; image?: TweetImage; mediaIds: string[] }
   shadowEditor: ReturnType<typeof createEditor>
   setTweetContent: (content: string) => void
@@ -40,6 +41,13 @@ interface TweetContextType {
   setMediaFiles: React.Dispatch<React.SetStateAction<MediaFile[]>>
   charCount: number
   setCharCount: React.Dispatch<React.SetStateAction<number>>
+  
+  // Thread support (new)
+  tweets: Tweet[]
+  addTweet: ({ initialContent, index }: { initialContent: string; index?: number }) => void
+  updateTweet: (id: string, content: string) => void
+  removeTweet: (id: string) => void
+  clearTweets: () => void
 }
 
 const TweetContext = createContext<TweetContextType | undefined>(undefined)
@@ -49,6 +57,15 @@ export type CurrentTweet = {
   content: string
   image?: TweetImage
   mediaIds: string[]
+}
+
+export type Tweet = {
+  id: string
+  content: string
+  image?: TweetImage
+  mediaIds: string[]
+  index: number
+  editor: ReturnType<typeof createEditor>
 }
 
 export interface MediaFile {
@@ -73,6 +90,9 @@ export function TweetProvider({ children }: PropsWithChildren) {
   })
 
   const [charCount, setCharCount] = useState(0)
+  
+  // Thread state management
+  const [tweets, setTweets] = useState<Tweet[]>([])
 
   const shadowEditorRef = useRef(createEditor({ ...initialConfig }))
   const shadowEditor = shadowEditorRef.current
@@ -85,9 +105,75 @@ export function TweetProvider({ children }: PropsWithChildren) {
     setCurrentTweet((prev) => ({ ...prev, image: undefined }))
   }
 
+  // Thread management functions
+  const addTweet = ({ initialContent, index }: { initialContent: string; index?: number }) => {
+    const newTweet: Tweet = {
+      id: nanoid(),
+      content: initialContent,
+      mediaIds: [],
+      index: index ?? tweets.length,
+      editor: createEditor({ ...initialConfig }),
+    }
+
+    // Initialize the editor with content
+    newTweet.editor.update(() => {
+      const root = $getRoot()
+      root.clear()
+      const paragraph = $createParagraphNode()
+      const textNode = $createTextNode(initialContent)
+      paragraph.append(textNode)
+      root.append(paragraph)
+    })
+
+    setTweets((prev) => {
+      const newTweets = [...prev]
+      if (index !== undefined) {
+        newTweets.splice(index, 0, newTweet)
+        // Reindex all tweets after insertion
+        return newTweets.map((tweet, idx) => ({ ...tweet, index: idx }))
+      } else {
+        newTweets.push(newTweet)
+        return newTweets
+      }
+    })
+  }
+
+  const updateTweet = (id: string, content: string) => {
+    setTweets((prev) => 
+      prev.map((tweet) => {
+        if (tweet.id === id) {
+          // Update the editor content
+          tweet.editor.update(() => {
+            const root = $getRoot()
+            root.clear()
+            const paragraph = $createParagraphNode()
+            const textNode = $createTextNode(content)
+            paragraph.append(textNode)
+            root.append(paragraph)
+          })
+          return { ...tweet, content }
+        }
+        return tweet
+      })
+    )
+  }
+
+  const removeTweet = (id: string) => {
+    setTweets((prev) => 
+      prev
+        .filter((tweet) => tweet.id !== id)
+        .map((tweet, index) => ({ ...tweet, index })) // Reindex
+    )
+  }
+
+  const clearTweets = () => {
+    setTweets([])
+  }
+
   return (
     <TweetContext.Provider
       value={{
+        // Single tweet support (existing)
         charCount,
         setCharCount,
         currentTweet,
@@ -97,6 +183,13 @@ export function TweetProvider({ children }: PropsWithChildren) {
         setMediaFiles,
         setTweetContent,
         removeTweetImage,
+        
+        // Thread support (new)
+        tweets,
+        addTweet,
+        updateTweet,
+        removeTweet,
+        clearTweets,
       }}
     >
       {children}

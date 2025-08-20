@@ -33,7 +33,7 @@ export const TweetMockup = memo(
         y: 0,
         scale: 1,
         transition: {
-          type: 'spring',
+          type: 'spring' as const,
           duration: 0.6,
           bounce: 0.1,
           staggerChildren: 0.1,
@@ -47,29 +47,24 @@ export const TweetMockup = memo(
         for (let i = 0; i < threads.length; i++) {
           const initialContent = threads[i]?.trim() as string
 
-          if (tweets[i]) {
-            updateTweet(tweets[i]!.id, initialContent)
+          // Fixed: Add proper null checking for tweets array
+          if (tweets && tweets[i]) {
+            updateTweet(tweets[i].id, initialContent)
           } else {
             addTweet({ initialContent, index: i })
           }
         }
       } else {
-        const tweet = tweets[index]
-        const shadowEditor = tweet?.editor
-
-        shadowEditor?.update(
-          () => {
-            const root = $getRoot()
-            const paragraph = $createParagraphNode()
-            const textNode = $createTextNode(text || '')
-
-            root.clear()
-
-            paragraph.append(textNode)
-            root.append(paragraph)
-          },
-          { tag: 'force-sync' },
-        )
+        // Single tweet apply logic - handle both existing and new tweets
+        const tweet = tweets && tweets[index]
+        
+        if (tweet && tweet.editor) {
+          // Update existing tweet
+          updateTweet(tweet.id, text || '')
+        } else {
+          // Create new tweet if none exists
+          addTweet({ initialContent: text || '', index })
+        }
       }
     }
 
@@ -154,7 +149,7 @@ export const TweetMockup = memo(
         </div>
       </motion.div>
     )
-  },
+  }
 )
 
 TweetMockup.displayName = 'TweetMockup'

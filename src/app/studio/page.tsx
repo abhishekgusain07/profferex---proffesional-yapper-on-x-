@@ -44,7 +44,7 @@ type LocalMedia = {
 const Studio = () => {
   const { data: session, isPending: sessionLoading } = useSession()
   const { accounts: twitterAccounts, activeAccount, isLoading: twitterDataLoading } = useTwitterData()
-  const { currentTweet, charCount, setTweetContent, setCharCount } = useTweets()
+  const { currentTweet, charCount, setTweetContent, setCharCount, tweets } = useTweets()
   const [lastTweetId, setLastTweetId] = useState<string | null>(null)
   const [media, setMedia] = useState<LocalMedia[]>([])
   const confettiRef = useRef<ConfettiRef>(null)
@@ -138,7 +138,25 @@ const Studio = () => {
 
   // Handle form submission (post immediately)
   const handleSubmit = () => {
-    postNow.mutate({ text: currentTweet.content.trim(), mediaIds })
+    // Check if we have multiple tweets (thread)
+    if (tweets && tweets.length > 1) {
+      // Post as thread
+      const firstTweet = tweets[0]
+      const remainingTweets = tweets.slice(1).map(tweet => ({
+        text: tweet.content.trim(),
+        mediaIds: tweet.mediaIds || []
+      }))
+      
+      postNow.mutate({
+        text: firstTweet.content.trim(),
+        mediaIds: firstTweet.mediaIds || [],
+        isThread: true,
+        threadTweets: remainingTweets
+      })
+    } else {
+      // Post single tweet (existing behavior)
+      postNow.mutate({ text: currentTweet.content.trim(), mediaIds })
+    }
   }
 
   // Handle scheduling tweets (used by Calendar20 component)
@@ -640,7 +658,10 @@ const Studio = () => {
                       className="h-11 w-auto bg-stone-600 hover:bg-stone-500 border-stone-700 shadow-[0_3px_0_#44403c]"
                       loading={postNow.isPending}
                     >
-                      {postNow.isPending ? 'Posting...' : 'Post'}
+                      {postNow.isPending 
+                        ? (tweets && tweets.length > 1 ? 'Posting Thread...' : 'Posting...') 
+                        : (tweets && tweets.length > 1 ? `Post Thread (${tweets.length})` : 'Post')
+                      }
                     </DuolingoButton>
 
                     {/* Queue/Schedule Buttons */}
