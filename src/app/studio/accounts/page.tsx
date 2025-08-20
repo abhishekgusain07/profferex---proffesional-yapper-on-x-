@@ -85,9 +85,8 @@ const AccountsPage = () => {
     }
   )
 
-  // Maintain compatibility with existing code
-  const accountsLoading = twitterDataLoading
-  const refetchAccounts = twitterAccountsQuery.refetch
+  // Store query utils for refetching
+  const utils = trpc.useUtils()
 
   const createTwitterLink = trpc.twitter.createLink.useQuery(
     { action: 'add-account' },
@@ -96,7 +95,8 @@ const AccountsPage = () => {
 
   const deleteAccountMutation = trpc.twitter.deleteAccount.useMutation({
     onSuccess: () => {
-      refetchAccounts()
+      utils.twitter.getAccounts.invalidate()
+      utils.twitter.getActiveAccount.invalidate()
       setDeleteModalOpen(false)
       setAccountToDelete(null)
     },
@@ -108,8 +108,6 @@ const AccountsPage = () => {
       setDeletingAccount(false)
     },
   })
-
-  const utils = trpc.useUtils()
 
   const setActiveAccountMutation = trpc.twitter.setActiveAccount.useMutation({
     onMutate: async (variables) => {
@@ -469,7 +467,7 @@ const AccountsPage = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {accountsLoading ? (
+              {twitterDataLoading ? (
                 <div className="space-y-4">
                   {[1, 2].map((i) => (
                     <div key={i} className="flex items-center gap-4 p-4 bg-slate-50/50 rounded-lg border border-slate-200 animate-pulse">

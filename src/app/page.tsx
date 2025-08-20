@@ -3,6 +3,7 @@
 import Navbar from '@/components/navbar'
 import DuolingoButton from '@/components/ui/duolingo-button'
 import { useSession } from '@/lib/auth-client'
+import { usePerformanceMonitor } from '@/hooks/use-performance'
 import { signOut } from '@/lib/auth-client'
 import Link from 'next/link'
 import Script from 'next/script'
@@ -11,6 +12,9 @@ import { Spotlight } from '@/components/ui/spotlight-new'
 
 const Page = () => {
   const { data: session } = useSession()
+  
+  // Monitor home page performance
+  usePerformanceMonitor('HomePage', [session])
 
   return (
     <>

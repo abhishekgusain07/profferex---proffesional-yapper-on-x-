@@ -7,15 +7,26 @@ import { Loader2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useSessionLoadingPerformance } from '@/hooks/use-performance'
 
 const Studio = () => {
   const { data: session, isPending: sessionLoading } = useSession()
   const [showAuthModal, setShowAuthModal] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { metrics, startSessionTimer, endSessionTimer } = useSessionLoadingPerformance()
 
   const editTweetId = searchParams?.get('edit')
   const isEditMode = Boolean(editTweetId)
+
+  // Track session loading performance
+  useEffect(() => {
+    if (sessionLoading) {
+      startSessionTimer()
+    } else {
+      endSessionTimer()
+    }
+  }, [sessionLoading, startSessionTimer, endSessionTimer])
 
   // Progressive loading: Show auth modal only if no session and not loading
   useEffect(() => {
