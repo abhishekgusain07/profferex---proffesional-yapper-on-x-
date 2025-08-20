@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
-import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
+import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { $getRoot, $createParagraphNode, $createTextNode } from 'lexical'
@@ -213,7 +213,7 @@ export const TweetItem = ({ tweet, index }: TweetItemProps) => {
           <div className="text-stone-800 leading-relaxed">
             <LexicalComposer initialConfig={config}>
               <div className="relative">
-                <RichTextPlugin
+                <PlainTextPlugin
                   contentEditable={<TweetContentEditable />}
                   placeholder={<TweetPlaceholder />}
                   ErrorBoundary={LexicalErrorBoundary}
