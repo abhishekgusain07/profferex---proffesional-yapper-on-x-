@@ -10,7 +10,7 @@ import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { $getRoot, $createParagraphNode, $createTextNode } from 'lexical'
-import { Upload, Trash2, X, ImagePlus } from 'lucide-react'
+import { Upload, Trash2, X, ImagePlus, Download } from 'lucide-react'
 import DuolingoButton from '@/components/ui/duolingo-button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -219,6 +219,15 @@ export const TweetItem = ({ tweet, index }: TweetItemProps) => {
     setMedia((prev) => prev.filter((m) => m.id !== id))
   }
 
+  const downloadMedia = (media: LocalMedia) => {
+    const link = document.createElement('a')
+    link.href = media.previewUrl
+    link.download = `media-${Date.now()}.${media.mediaType === 'video' ? 'mp4' : 'jpg'}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div className="relative p-3 border-2 border-transparent border-dashed bg-white rounded-xl w-full transition-colors">
       <div className="w-full flex gap-3 relative">
@@ -258,13 +267,22 @@ export const TweetItem = ({ tweet, index }: TweetItemProps) => {
                         alt="Upload preview"
                         className="w-full h-32 object-cover"
                       />
-                      <button
-                        type="button"
-                        className="absolute top-1 right-1 w-5 h-5 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
-                        onClick={() => removeMedia(m.id)}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <DuolingoButton
+                          size="icon"
+                          variant="secondary"
+                          onClick={() => downloadMedia(m)}
+                        >
+                          <Download className="size-4" />
+                        </DuolingoButton>
+                        <DuolingoButton
+                          size="icon"
+                          variant="destructive"
+                          onClick={() => removeMedia(m.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </DuolingoButton>
+                      </div>
                       {m.uploading && (
                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                           <div className="flex items-center gap-2 text-white text-xs">
