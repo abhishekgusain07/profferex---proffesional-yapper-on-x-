@@ -68,9 +68,8 @@ const AccountsPage = () => {
     undefined,
     { 
       enabled: !!session, 
-      initialData: twitterAccounts,
       staleTime: 5 * 60 * 1000, // 5 minutes
-      cacheTime: 60 * 60 * 1000, // 1 hour
+      gcTime: 60 * 60 * 1000, // 1 hour (renamed from cacheTime)
     }
   )
 
@@ -78,9 +77,8 @@ const AccountsPage = () => {
     undefined,
     { 
       enabled: !!session, 
-      initialData: activeAccount,
       staleTime: 2 * 60 * 1000, // 2 minutes
-      cacheTime: 30 * 60 * 1000, // 30 minutes
+      gcTime: 30 * 60 * 1000, // 30 minutes (renamed from cacheTime)
       refetchOnWindowFocus: true,
     }
   )
