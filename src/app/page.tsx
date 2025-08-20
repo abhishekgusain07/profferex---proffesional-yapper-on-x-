@@ -1,20 +1,15 @@
-'use client'
-
 import Navbar from '@/components/navbar'
 import DuolingoButton from '@/components/ui/duolingo-button'
-import { useSession } from '@/lib/auth-client'
-import { usePerformanceMonitor } from '@/hooks/use-performance'
-import { signOut } from '@/lib/auth-client'
+import { getServerSession } from '@/lib/server-auth'
 import Link from 'next/link'
 import Script from 'next/script'
 import YCButtonLight from '@/components/notycomb'
 import { Spotlight } from '@/components/ui/spotlight-new'
 
-const Page = () => {
-  const { data: session } = useSession()
-  
-  // Monitor home page performance
-  usePerformanceMonitor('HomePage', [session])
+export const dynamic = 'force-dynamic'
+
+const Page = async () => {
+  const session = await getServerSession()
 
   return (
     <>
@@ -74,7 +69,7 @@ const Page = () => {
                 {/* CTA Section */}
                 <div className="space-y-8">
                   <div className="flex flex-col items-center gap-4 max-w-md mx-auto">
-                    {session?.user ? (
+                    {session ? (
                       <Link href="/studio" className="w-full">
                         <DuolingoButton className="w-full h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200">
                           Go to Studio →
