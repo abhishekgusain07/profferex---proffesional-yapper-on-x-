@@ -10,11 +10,19 @@ import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { $getRoot, $createParagraphNode, $createTextNode } from 'lexical'
-import { Upload, Trash2, X } from 'lucide-react'
+import { Upload, Trash2, X, ImagePlus } from 'lucide-react'
 import DuolingoButton from '@/components/ui/duolingo-button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { trpc } from '@/trpc/client'
+import { ImageTool } from './image-tool'
 
 const initialConfig = {
   namespace: 'tweet-editor-item',
@@ -146,6 +154,7 @@ function SyncWithTweetPlugin({ tweet }: { tweet: Tweet }) {
 export const TweetItem = ({ tweet, index }: TweetItemProps) => {
   const { removeTweet } = useTweets()
   const [media, setMedia] = useState<LocalMedia[]>([])
+  const [isScreenshotEditorOpen, setIsScreenshotEditorOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   const config = {
@@ -291,6 +300,22 @@ export const TweetItem = ({ tweet, index }: TweetItemProps) => {
                     <p>Upload media</p>
                   </TooltipContent>
                 </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DuolingoButton
+                      variant="secondary"
+                      size="icon"
+                      className="rounded-md"
+                      onClick={() => setIsScreenshotEditorOpen(true)}
+                    >
+                      <ImagePlus className="size-4" />
+                      <span className="sr-only">Screenshot editor</span>
+                    </DuolingoButton>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Screenshot editor</p>
+                  </TooltipContent>
+                </Tooltip>
 
                 {index !== 0 && (
                   <Tooltip>
@@ -361,6 +386,38 @@ export const TweetItem = ({ tweet, index }: TweetItemProps) => {
           e.currentTarget.value = ''
         }}
       />
+      
+      {/* Screenshot Editor Drawer */}
+      <Drawer modal={false} open={isScreenshotEditorOpen} onOpenChange={setIsScreenshotEditorOpen}>
+        <DrawerContent className="h-full">
+          <div className="max-w-6xl mx-auto w-full">
+            <DrawerHeader className="px-0">
+              <DrawerTitle className="font-medium">Edit image</DrawerTitle>
+            </DrawerHeader>
+            <DrawerClose asChild>
+              <DuolingoButton
+                variant="secondary"
+                size="icon"
+                className="absolute right-4 top-4 rounded-full p-2"
+              >
+                <X className="h-4 w-4 text-stone-500" />
+              </DuolingoButton>
+            </DrawerClose>
+          </div>
+
+          <div className="w-full drawer-body h-full overflow-y-auto">
+            <div className="max-w-6xl mx-auto w-full mb-12">
+              <ImageTool
+                onClose={() => setIsScreenshotEditorOpen(false)}
+                onUpload={async (file) => {
+                  setIsScreenshotEditorOpen(false)
+                  await handleFilesSelected([file])
+                }}
+              />
+            </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }
