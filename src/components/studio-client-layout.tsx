@@ -17,6 +17,10 @@ interface LayoutProps extends PropsWithChildren {
     accounts?: any[] | null
     activeAccount?: any | null
   } | null
+  // Enhanced layout options for contentport-style dual sidebars
+  leftSidebarCollapsed?: boolean
+  rightSidebarWidth?: string
+  enableResponsiveLayout?: boolean
 }
 
 const initialConfig = {
@@ -27,6 +31,7 @@ const initialConfig = {
       italic: 'italic',
       underline: 'underline',
     },
+    paragraph: 'text-gray-900 leading-relaxed',
   },
   onError: (error: Error) => {
     console.error('[Chat Editor Error]', error)
@@ -52,6 +57,9 @@ export default function StudioClientLayout({
   state,
   hideAppSidebar,
   initialTwitterData,
+  leftSidebarCollapsed = false,
+  rightSidebarWidth,
+  enableResponsiveLayout = true,
 }: LayoutProps) {
   let defaultOpen = true
 
@@ -59,26 +67,47 @@ export default function StudioClientLayout({
     defaultOpen = state && state.value === 'true'
   }
 
+  const finalWidth = rightSidebarWidth || width?.value || '28rem'
+
   return (
     <DashboardProviders initialTwitterData={initialTwitterData}>
-      <div className="flex">
-        <SidebarProvider className="w-fit" defaultOpen={false}>
+      {/* Enhanced contentport-style layout with proper sidebar management */}
+      <div className="flex min-h-screen bg-gray-50/30">
+        {/* Left Sidebar - Navigation */}
+        <SidebarProvider 
+          className="w-fit border-r border-gray-200 bg-white shadow-sm" 
+          defaultOpen={!leftSidebarCollapsed}
+        >
           <LeftSidebar />
         </SidebarProvider>
 
-        <SidebarProvider defaultOpen={defaultOpen} defaultWidth={width?.value || '32rem'}>
-          <RightSidebarKeyboardShortcut>
+        {/* Main Content Area */}
+        <div className="flex-1 flex">
+          {/* Content */}
+          <div className="flex-1 min-w-0">
             {hideAppSidebar ? (
-              <AppSidebarInset>{children}</AppSidebarInset>
+              <div className="h-full">
+                {children}
+              </div>
             ) : (
-              <LexicalComposer initialConfig={initialConfig}>
-                <AppSidebar>
-                  <AppSidebarInset>{children}</AppSidebarInset>
-                </AppSidebar>
-              </LexicalComposer>
+              <SidebarProvider 
+                defaultOpen={defaultOpen} 
+                defaultWidth={finalWidth}
+                className="h-full"
+              >
+                <RightSidebarKeyboardShortcut>
+                  <LexicalComposer initialConfig={initialConfig}>
+                    <AppSidebar>
+                      <AppSidebarInset className="bg-white">
+                        {children}
+                      </AppSidebarInset>
+                    </AppSidebar>
+                  </LexicalComposer>
+                </RightSidebarKeyboardShortcut>
+              </SidebarProvider>
             )}
-          </RightSidebarKeyboardShortcut>
-        </SidebarProvider>
+          </div>
+        </div>
       </div>
     </DashboardProviders>
   )
