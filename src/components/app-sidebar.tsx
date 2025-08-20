@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useAttachments } from '@/hooks/use-attachments'
 import { useChatContext } from '@/hooks/use-chat'
+import { useTweets } from '@/hooks/use-tweets'
 import { trpc } from '@/trpc/client'
 import { MyUIMessage } from '@/trpc/routers/chat'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
@@ -281,6 +282,14 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   const { messages, status, sendMessage, startNewChat, id, stop } = useChatContext()
   const { attachments, removeAttachment, addChatAttachment } = useAttachments()
+  const { tweets } = useTweets()
+
+  // Helper function to convert tweets to PayloadTweet format
+  const toPayloadTweet = useCallback((tweet: { id: string; content: string; index: number }) => ({
+    id: tweet.id,
+    content: tweet.content,
+    index: tweet.index,
+  }), [])
 
   const updateURL = useCallback(
     (key: string, value: string) => {
@@ -301,6 +310,9 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         updateURL('chatId', id)
       }
 
+      // Convert tweets to PayloadTweet format
+      const payloadTweets = tweets.map(toPayloadTweet)
+
       sendMessage({
         text,
         metadata: { 
@@ -308,7 +320,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
             ...att,
             title: att.title || undefined
           })), 
-          tweets: [], 
+          tweets: payloadTweets, 
           userMessage: text 
         },
       })
@@ -321,7 +333,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         })
       }
     },
-    [searchParams, updateURL, id, sendMessage, attachments, removeAttachment],
+    [searchParams, updateURL, id, sendMessage, attachments, removeAttachment, tweets, toPayloadTweet],
   )
 
   const handleNewChat = useCallback(() => {

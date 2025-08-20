@@ -1,14 +1,27 @@
-import { z } from 'zod'
-import { tool} from 'ai'
-import { MyUIMessage } from '../../../routers/chat'
+import { avoidPrompt, createStylePrompt, editToolSystemPrompt } from '@/lib/prompt-utils'
+import { redis } from '@/lib/redis'
+import { XmlPrompt } from '@/lib/xml-prompt'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import {
+  convertToModelMessages,
+  generateId,
+  streamText,
+  tool,
+} from 'ai'
+import { HTTPException } from 'hono/http-exception'
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
+import { format } from 'date-fns'
 
-// Types for the tool context adapted for tRPC
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+})
+
 interface TweetToolContext {
   writer: any
   ctx: {
     userContent: string
-    messages: MyUIMessage[]
+    messages: any[]
     account: {
       name: string
       username: string
@@ -23,221 +36,212 @@ interface TweetToolContext {
   }
 }
 
-const tweetToolSchema = z.object({
+const singleTweetSchema = z.object({
+  index: z
+    .number()
+    .describe(
+      `The index of the tweet to edit. When creating a thread, using a non-existing index will create a new tweet at this index.`,
+    ),
   instruction: z.string().describe(
-    'The user instruction for creating tweets or threads. Examples: "write a thread about AI", "create a tweet about productivity", etc.'
+    `Capture the user's instruction EXACTLY as they wrote it - preserve every detail including:
+- Exact wording and phrasing
+- Original capitalization (lowercase, UPPERCASE, Title Case)
+- Punctuation and special characters
+- Typos or informal language
+- Numbers and formatting
+
+DO NOT paraphrase, summarize, or clean up the instruction in any way.
+
+<examples>
+<example>
+<user_message>make a tweet about AI being overhyped tbh</user_message>
+<instruction>make a tweet about AI being overhyped tbh</instruction>
+</example>
+
+<example>
+<user_message>make 2 tweets about why nextjs 15 is AMAZING!!!</user_message>
+<instruction>tweet about why nextjs 15 is AMAZING!!!</instruction>
+</example>
+
+<example>
+<user_message>write something funny about debugging at 3am</user_message>
+<instruction>write something funny about debugging at 3am</instruction>
+</example>
+
+<example>
+<user_message>write a thread about car engines</user_message>
+<instruction>write a thread about car engines</instruction>
+</example>
+</examples>
+
+Remember: This tool creates/edits ONE tweet or thread per call. If the user requests multiple drafts, frame the instruction for one specific draft only. If the user requests one thread, calling this tool once will create the entire thread.`,
   ),
-  shouldPost: z.boolean().default(true).describe(
-    'Whether to immediately post the generated content to Twitter or just generate it as a draft.'
-  ),
-  accountId: z.string().optional().describe(
-    'Optional specific Twitter account ID to use for posting. If not provided, will use the active account.'
-  ),
+  tweetContent: z
+    .string()
+    .optional()
+    .describe(
+      "Optional: If a user wants changes to a specific tweet, write that tweet's content here. Copy it EXACTLY 1:1 without ANY changes whatsoever - same casing, formatting, etc. If user is not talking about a specific previously generated tweet, leave undefined.",
+    ),
+  imageDescriptions: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .describe(
+      'Optional: If a user attached image(s), explain their content in high detail to be used as context while writing the tweet.',
+    ),
 })
-
-// Enhanced helper to detect if instruction is asking for a thread
-function isThreadRequest(instruction: string): boolean {
-  const threadKeywords = [
-    'thread', 'threads', 'twitter thread', 'tweet thread', 'tweetstorm',
-    'series of tweets', 'multiple tweets', 'explain in detail', 'detailed explanation',
-    'step by step', 'break down', 'comprehensive', 'in depth',
-    'elaborate', 'expand on', 'tell me more', 'deep dive',
-    'list of', 'several tweets', 'chain of tweets',
-  ]
-  
-  const lowerInstruction = instruction.toLowerCase()
-  return threadKeywords.some(keyword => lowerInstruction.includes(keyword)) ||
-         (instruction.length > 200) || // Long instructions likely need threads
-         /\d+\s*(tweets?|parts?)/.test(lowerInstruction) // "5 tweets about", "3 parts", etc.
-}
-
-// Enhanced helper to generate content based on instruction
-function generateTweetContent(instruction: string, account: { name: string, username: string }, style: any): string {
-  const isThread = isThreadRequest(instruction)
-  
-  // Extract topic from instruction
-  const topic = instruction.toLowerCase()
-    .replace(/(?:thread|tweets?)\s+about|create\s+a?\s*(?:thread|tweets?)\s+about|write\s+a?\s*(?:thread|tweets?)\s+about|make\s+a?\s*(?:thread|tweets?)\s+about/gi, '')
-    .replace(/^(?:write|create|make|draft|generate)\s+/gi, '')
-    .trim() || 'this topic'
-  
-  if (isThread) {
-    // Generate enhanced thread content with better variety
-    const threadStarters = [
-      `🧵 Thread: ${topic.charAt(0).toUpperCase() + topic.slice(1)}`,
-      `Let me share some thoughts on ${topic} (thread 🧵)`,
-      `Breaking down ${topic} - a thread 🧵`,
-      `${topic.charAt(0).toUpperCase() + topic.slice(1)} explained (🧵 thread)`,
-    ]
-    
-    const starter = threadStarters[Math.floor(Math.random() * threadStarters.length)]
-    
-    // Generate contextual thread content
-    if (topic.includes('ai') || topic.includes('artificial intelligence')) {
-      return `${starter}
-
-AI is transforming how we work and think. Here's what you need to know about the current landscape.
----
-The key breakthrough isn't just in the technology itself, but in how it's becoming accessible to everyone.
----
-Most people are still thinking about AI wrong. It's not about replacement - it's about augmentation.
----
-The real opportunity lies in learning to work WITH AI, not competing against it. What's your take?`
-    } else if (topic.includes('productivity') || topic.includes('work')) {
-      return `${starter}
-
-Productivity isn't about doing more things. It's about doing the right things more effectively.
----
-The biggest productivity killer? Constant context switching. Your brain needs time to focus.
----
-Here's what actually works: Time blocking, single-tasking, and ruthless prioritization.
----
-Remember: Being busy ≠ Being productive. Focus on outcomes, not activities.`
-    } else if (topic.includes('startup') || topic.includes('business')) {
-      return `${starter}
-
-Starting a business isn't just about having a great idea. Execution is everything.
----
-The most common mistake? Building something nobody wants. Talk to your customers first.
----
-Focus on solving a real problem for real people. Everything else is secondary.
----
-Remember: It's better to have 100 customers who love you than 1000 who are indifferent.`
-    } else {
-      // Generic thread template
-      return `${starter}
-
-Let me break this down into key points that matter.
----
-First, understanding the fundamentals gives you the foundation to build on.
----
-Then, looking at practical applications shows you how to use this knowledge.
----
-Finally, here's the key insight that ties it all together. What do you think?`
-    }
-  } else {
-    // Generate enhanced single tweet with better variety
-    const tweetStarters = [
-      `Hot take on ${topic}:`,
-      `Unpopular opinion about ${topic}:`,
-      `Something I learned about ${topic}:`,
-      `Quick thought on ${topic}:`,
-      `Reality check about ${topic}:`,
-    ]
-    
-    const starter = Math.random() > 0.7 ? tweetStarters[Math.floor(Math.random() * tweetStarters.length)] : ''
-    
-    const insights = [
-      "This changes everything we thought we knew.",
-      "The conventional wisdom is completely wrong here.", 
-      "Most people are approaching this backwards.",
-      "Here's why this matters more than you think.",
-      "The real game-changer isn't what you'd expect."
-    ]
-    
-    const insight = insights[Math.floor(Math.random() * insights.length)]
-    const emoji = style.includeEmojis ? [' 🚀', ' 💡', ' 🔥', ' ✨', ' 🎯'][Math.floor(Math.random() * 5)] : ''
-    
-    return starter ? `${starter} ${insight}${emoji}` : `${insight.replace(/^./, (c) => c.toUpperCase())}${emoji}`
-  }
-}
-
-// Helper to parse thread content into individual tweets
-function parseThreadContent(content: string): { isThread: boolean; tweets: Array<{ text: string }> } {
-  if (!content.includes('---')) {
-    return { isThread: false, tweets: [{ text: content.trim() }] }
-  }
-  
-  const tweetTexts = content.split('---').map(tweet => tweet.trim()).filter(tweet => tweet.length > 0)
-  return {
-    isThread: true,
-    tweets: tweetTexts.map(text => ({ text }))
-  }
-}
 
 export const createTweetTool = ({ writer, ctx }: TweetToolContext) => {
   return tool({
-    description: 'Generate and optionally post tweets or threads to Twitter based on user instructions',
-    inputSchema: tweetToolSchema,
-    execute: async ({ instruction, shouldPost, accountId }) => {
+    description: 'Generate high-quality tweets and threads using advanced AI prompting',
+    inputSchema: singleTweetSchema,
+    execute: async ({ instruction, tweetContent, imageDescriptions, index }) => {
       const generationId = nanoid()
 
+      writer.write({
+        type: 'data-tool-output',
+        id: generationId,
+        data: {
+          text: '',
+          index,
+          status: 'processing',
+        },
+      })
+
       try {
-        // Generate content based on instruction
-        const generatedContent = generateTweetContent(instruction, ctx.account, ctx.style)
-        
-        // Parse content to determine if it's a thread
-        const { isThread, tweets } = parseThreadContent(generatedContent)
-        
-        // Display the generated content using the writer with enhanced data
-        await writer.write({
+        // Create style for the user
+        const defaultStyle = {
+          tweets: [
+            { text: "just shipped a new feature that solves the problem everyone's been talking about" },
+            { text: "learned something new today: sometimes the simplest solution is the best one" },
+            { text: "working on this late night and realized why i love building things" }
+          ],
+          prompt: `Write in ${ctx.style.tone} tone, targeting ${ctx.style.targetAudience}. ${ctx.style.includeEmojis ? 'Include emojis naturally.' : 'No emojis.'} ${ctx.style.includeHashtags ? 'Use relevant hashtags.' : 'No hashtags.'}`
+        }
+
+        const prompt = new XmlPrompt()
+
+        prompt.open('prompt', { date: format(new Date(), 'EEEE, yyyy-MM-dd') })
+
+        // system
+        prompt.open('system')
+        prompt.text(editToolSystemPrompt({ name: ctx.account.name }))
+        prompt.close('system')
+
+        prompt.open('language_rules', { note: 'be EXTREMELY strict with these rules' })
+        prompt.text(avoidPrompt())
+        prompt.close('language_rules')
+
+        // history
+        prompt.open('history')
+
+        ctx.messages.forEach((msg) => {
+          prompt.open('response_pair')
+          msg.parts?.forEach((part: any) => {
+            if (part.type === 'text' && msg.role === 'user') {
+              prompt.open('user_message')
+              prompt.tag('user_request', part.text)
+              prompt.close('user_message')
+            }
+
+            if (part.type === 'data-tool-output') {
+              prompt.tag('response_tweet', part.data.text)
+            }
+          })
+          prompt.close('response_pair')
+        })
+
+        prompt.close('history')
+
+        // Current job
+        prompt.tag('current_user_request', instruction, {
+          note: 'it is upon you to decide whether the user is referencing their previous history when iterating or if they are asking for changes in the current tweet drafts.',
+        })
+
+        if (tweetContent) {
+          prompt.tag('user_is_referencing_tweet', tweetContent)
+        }
+
+        // style
+        prompt.tag('style', createStylePrompt({ 
+          account: ctx.account, 
+          style: defaultStyle 
+        }))
+
+        prompt.tag("reminder", "Remember to NEVER use ANY of the PROHIBITED_WORDS.")
+
+        prompt.close('prompt')
+
+        const messages = [
+          {
+            id: generateId(),
+            role: 'user' as const,
+            parts: [
+              { type: 'text' as const, text: prompt.toString() },
+              ...(imageDescriptions ?? []).map((text) => ({
+                type: 'text' as const,
+                text: `<user_attached_image_description note="The user attached an image to this message. For convenience, you'll see a textual description of the image. It may or may not be directly relevant to your created tweet.">${text}</user_attached_image_description>`,
+              })),
+            ],
+          },
+        ]
+
+        const model = openrouter.chat('anthropic/claude-3-5-sonnet-20241022', {
+          reasoning: { enabled: false, effort: 'low' },
+        })
+
+        const result = streamText({
+          model,
+          system: editToolSystemPrompt({ name: ctx.account.name }),
+          messages: convertToModelMessages(messages),
+          onError(error) {
+            console.log('❌❌❌ ERROR:', JSON.stringify(error, null, 2))
+
+            throw new HTTPException(500, {
+              message: error instanceof Error ? error.message : 'Something went wrong.',
+            })
+          },
+        })
+
+        let fullText = ''
+
+        for await (const textPart of result.textStream) {
+          fullText += textPart
+          writer.write({
+            type: 'data-tool-output',
+            id: generationId,
+            data: {
+              text: fullText,
+              index,
+              status: 'streaming',
+            },
+          })
+        }
+
+        writer.write({
           type: 'data-tool-output',
           id: generationId,
           data: {
-            text: generatedContent,
-            index: 0,
+            text: fullText,
+            index,
             status: 'complete',
-            metadata: {
-              isThread,
-              tweetCount: tweets.length,
-              instruction,
-              shouldPost,
-              accountId,
-              account: ctx.account,
-              tweets: tweets.map((tweet, index) => ({
-                id: `generated-${generationId}-${index}`,
-                text: tweet.text,
-                index: index + 1,
-                isConnectedBefore: index > 0,
-                isConnectedAfter: index < tweets.length - 1,
-              }))
-            }
-          }
+          },
         })
 
-        // Enhanced posting logic with actual Twitter integration preparation
-        if (shouldPost) {
-          try {
-            // TODO: Integrate with actual tRPC twitter.postNow when user context is available
-            // This would require passing the authenticated user context through the tool
-            await writer.writeText(`\n\n✅ ${isThread ? 'Thread' : 'Tweet'} generated! ${isThread ? `${tweets.length} tweets` : '1 tweet'} ready for posting.`)
-            
-            if (isThread) {
-              await writer.writeText('\n\n🧵 Thread posting will publish all tweets in sequence with proper threading.')
-            }
-            
-            await writer.writeText('\n\nUse the "Post Now" button to publish to your Twitter account.')
-          } catch (error) {
-            console.error('Posting preparation error:', error)
-            await writer.writeText(`\n\n⚠️ ${isThread ? 'Thread' : 'Tweet'} generated successfully, but posting setup failed. You can try posting manually.`)
-          }
-        } else {
-          await writer.writeText(`\n\n📝 ${isThread ? 'Thread' : 'Tweet'} generated as draft. ${isThread ? `${tweets.length} tweets` : '1 tweet'} ready for review and posting.`)
-        }
-
-        return {
-          success: true,
-          content: generatedContent,
-          isThread,
-          tweetCount: tweets.length,
-          generationId,
-          tweets: tweets.map((tweet, index) => ({
-            id: `generated-${generationId}-${index}`,
-            text: tweet.text,
-            index: index + 1,
-            mediaIds: [], // Future: support for media in threads
-          })),
-          metadata: {
-            instruction,
-            shouldPost,
-            accountId,
-            account: ctx.account,
-            generatedAt: new Date().toISOString(),
-          }
-        }
+        return fullText
       } catch (error) {
         console.error('Tweet generation error:', error)
-        await writer.writeText('❌ Failed to generate tweet content. Please try again.')
+        
+        writer.write({
+          type: 'data-tool-output',
+          id: generationId,
+          data: {
+            text: 'Failed to generate tweet content. Please try again.',
+            index,
+            status: 'complete',
+          },
+        })
+        
         throw new Error('Failed to generate tweet content')
       }
     },

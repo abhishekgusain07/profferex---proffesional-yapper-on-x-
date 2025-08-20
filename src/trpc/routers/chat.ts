@@ -21,6 +21,13 @@ import {
 import { format } from 'date-fns'
 import { HTTPException } from 'hono/http-exception'
 import { createTweetTool } from './chat/tools/create-tweet-tool'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { assistantPrompt } from '@/lib/prompt-utils'
+import { XmlPrompt } from '@/lib/xml-prompt'
+
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+})
 
 // Proper MyUIMessage type matching @contentport/ pattern with tRPC adaptations
 export type MyUIMessage = UIMessage<
@@ -273,27 +280,87 @@ export const chatRouter = createTRPCRouter({
 
       const messages = [...history, userMessage] as MyUIMessage[]
 
-      // For now, return a simple response structure
-      // This will be enhanced with actual AI streaming in the next phase
-      const responseMessage: MyUIMessage = {
-        id: generateId(),
-        role: 'assistant',
-        parts: [
-          {
-            type: 'text',
-            text: 'I can help you with creating tweets and threads. This is a placeholder response that will be replaced with AI-powered content generation.',
-          },
-        ],
-      }
-
-      const updatedMessages = [...messages, responseMessage]
-      await saveMessagesToRedis(id, updatedMessages)
-
-      // Update chat history list
-      const title = messages[0]?.metadata?.userMessage ?? 'Unnamed chat'
-      await updateChatHistoryList(user.email, id, title)
-
-      return { success: true, messageId: responseMessage.id }
+      const stream = createUIMessageStream<MyUIMessage>({
+        originalMessages: messages,
+        generateId: createIdGenerator({
+          prefix: 'msg',
+          size: 16,
+        }),
+        onFinish: async ({ messages }) => {
+          await saveMessagesToRedis(id, messages)
+          
+          const historyKey = `chat:history-list:${user.email}`
+          const existingHistory = await getChatHistoryList(user.email)
+          
+          const title = messages[0]?.metadata?.userMessage ?? 'Unnamed chat'
+          
+          const chatHistoryItem: ChatHistoryItem = {
+            id,
+            title,
+            lastUpdated: new Date().toISOString(),
+            messageCount: messages.length
+          }
+          
+          const updatedHistory = [
+            chatHistoryItem,
+            ...existingHistory.filter((item) => item.id !== id),
+          ]
+          
+          await saveChatHistoryList(user.email, updatedHistory)
+        },
+        onError(error) {
+          console.log('❌❌❌ ERROR:', JSON.stringify(error, null, 2))
+          
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: error instanceof Error ? error.message : 'Something went wrong.',
+          })
+        },
+        execute: async ({ writer }) => {
+          const generationId = crypto.randomUUID()
+          
+          // Create tweet tool with enhanced prompting
+          const writeTweet = createTweetTool({
+            writer,
+            ctx: {
+              userContent,
+              messages,
+              account: {
+                name: user.name || 'User',
+                username: user.email.split('@')[0],
+              },
+              style: {
+                tone: 'casual',
+                length: 'medium',
+                includeEmojis: true,
+                includeHashtags: false,
+                targetAudience: 'tech community',
+              },
+            },
+          })
+          
+          // Get tweets from metadata (if any)
+          const tweets = message.metadata?.tweets ?? []
+          
+          const result = streamText({
+            model: openrouter.chat('anthropic/claude-3-5-sonnet-20241022', {
+              reasoning: { enabled: false, effort: 'low' },
+            }),
+            system: assistantPrompt({ tweets }),
+            messages: convertToModelMessages(messages),
+            tools: { writeTweet },
+            stopWhen: stepCountIs(3),
+            experimental_transform: smoothStream({
+              delayInMs: 20,
+              chunking: /[^-]*---/,
+            }),
+          })
+          
+          writer.merge(result.toUIMessageStream())
+        },
+      })
+      
+      return createUIMessageStreamResponse({ stream })
     }),
 
   // Get conversations (comprehensive list)
