@@ -24,10 +24,10 @@ const AccountContext = createContext<{
 } | null>(null)
 
 export function AccountProvider({ children }: { children: React.ReactNode }) {
-  const { data, isLoading } = trpc.twitter.getActiveAccount.useQuery()
-
+  // Don't automatically fetch account data - let components fetch it when needed
+  // This prevents unnecessary API calls on pages that don't need account data
   return (
-    <AccountContext.Provider value={{ account: data ?? null, isLoading }}>
+    <AccountContext.Provider value={{ account: null, isLoading: false }}>
       {children}
     </AccountContext.Provider>
   )
@@ -39,8 +39,15 @@ export function useAccount() {
   return ctx
 }
 
+// Hook for when you actually need account data (will trigger the API call)
+export function useAccountData() {
+  const { data: account, isLoading } = trpc.twitter.getActiveAccount.useQuery()
+  return { account: account ?? null, isLoading }
+}
+
 export function AccountAvatar({ className }: { className?: string }) {
-  const { account, isLoading } = useAccount()
+  // Fetch account data only when this component is rendered
+  const { data: account, isLoading } = trpc.twitter.getActiveAccount.useQuery()
   
   if (isLoading || !account) {
     return <Skeleton className={cn('h-10 w-10 rounded-full', className)} />
@@ -63,7 +70,8 @@ export function AccountName({
   className?: string
   animate?: boolean
 }) {
-  const { account, isLoading } = useAccount()
+  // Fetch account data only when this component is rendered
+  const { data: account, isLoading } = trpc.twitter.getActiveAccount.useQuery()
 
   if (isLoading || !account) {
     return <Skeleton className={cn('h-4 w-24 rounded', className)} />
@@ -82,7 +90,8 @@ export function AccountName({
 }
 
 export function AccountHandle({ className }: { className?: string }) {
-  const { account, isLoading } = useAccount()
+  // Fetch account data only when this component is rendered
+  const { data: account, isLoading } = trpc.twitter.getActiveAccount.useQuery()
   
   if (isLoading || !account) {
     return <Skeleton className={cn('h-4 w-16 rounded', className)} />
