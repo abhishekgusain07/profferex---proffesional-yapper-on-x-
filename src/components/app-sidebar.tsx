@@ -323,24 +323,31 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
       console.log('📤 Sending message with processed attachments:', attachmentData.length)
 
-      sendMessage({
-        text,
-        metadata: { 
-          attachments: attachmentData, 
-          tweets: payloadTweets, 
-          userMessage: text 
-        },
-      })
-
-      // Clear attachments after successful send
-      if (attachments.length > 0) {
-        console.log('🧹 Clearing attachments after send')
-        requestAnimationFrame(() => {
-          attachments.forEach((a) => {
-            console.log('🗑️  Removing attachment:', a.id, a.title)
-            removeAttachment({ id: a.id })
-          })
+      try {
+        sendMessage({
+          text,
+          metadata: { 
+            attachments: attachmentData, 
+            tweets: payloadTweets, 
+            userMessage: text 
+          },
         })
+
+        // Clear attachments after successful send - delay to allow server processing
+        if (attachments.length > 0) {
+          console.log('🧹 Clearing attachments after send')
+          // Increased delay to allow server processing time
+          setTimeout(() => {
+            console.log('⏱️  Proceeding with attachment removal after delay')
+            attachments.forEach((a) => {
+              console.log('🗑️  Removing attachment:', a.id, a.title)
+              removeAttachment({ id: a.id })
+            })
+          }, 100) // 100ms delay instead of immediate requestAnimationFrame
+        }
+      } catch (error) {
+        console.error('❌ Error sending message:', error)
+        // Don't remove attachments if there was an error
       }
     },
     [searchParams, updateURL, id, sendMessage, attachments, removeAttachment, tweets, toPayloadTweet],

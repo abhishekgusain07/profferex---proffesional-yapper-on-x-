@@ -26,6 +26,7 @@ import { getDocument } from '@/db/queries/knowledge'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { assistantPrompt } from '@/lib/prompt-utils'
 import { XmlPrompt } from '@/lib/xml-prompt'
+import { parseAttachments } from './chat/utils'
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -150,100 +151,6 @@ async function updateChatHistoryList(userEmail: string, chatId: string, title: s
   await saveChatHistoryList(userEmail, updatedHistory.slice(0, 20)) // Keep only last 20 chats
 }
 
-// Parse attachments helper - Enhanced to handle knowledge documents
-async function parseAttachments({
-  attachments,
-  userId,
-}: {
-  attachments?: Array<TAttachment>
-  userId: string
-}) {
-  const links: Array<{ link: string; content?: string }> = []
-  const parsedAttachments: Array<{ type: string; text?: string; title?: string }> = []
-
-  if (!attachments) {
-    return { links, attachments: parsedAttachments }
-  }
-
-  console.log('🔍 Processing attachments:', attachments.length, 'items')
-
-  for (const attachment of attachments) {
-    console.log('📎 Processing attachment:', attachment.id, attachment.variant, attachment.type)
-
-    if (attachment.variant === 'knowledge') {
-      // Handle knowledge documents
-      try {
-        const document = await getDocument(attachment.id, userId)
-        
-        if (document) {
-          console.log('📄 Knowledge document found:', document.title, 'type:', document.type)
-          
-          if (document.type === 'url' && document.sourceUrl) {
-            // For URL knowledge documents, add as link with content
-            const content = document.metadata?.content || document.description || ''
-            links.push({
-              link: document.sourceUrl,
-              content: content
-            })
-            console.log('🔗 Added URL link with content length:', content.length)
-          } else {
-            // For other knowledge documents, add as text attachment
-            const content = document.metadata?.content || document.description || ''
-            if (content) {
-              parsedAttachments.push({
-                type: 'knowledge',
-                title: document.title!,
-                text: content.slice(0, 8000), // Increased from 2000 to 8000 chars
-              })
-              console.log('📝 Added knowledge doc with content length:', content.length)
-            } else {
-              console.warn('⚠️  Knowledge document has no content:', document.title)
-            }
-          }
-        } else {
-          console.warn('⚠️  Knowledge document not found:', attachment.id)
-        }
-      } catch (error) {
-        console.error('❌ Failed to load knowledge document:', attachment.id, error)
-      }
-    } else if (attachment.variant === 'chat') {
-      // Handle chat attachments
-      if (attachment.type === 'url') {
-        links.push({ link: attachment.title || '' })
-        console.log('🔗 Added chat URL:', attachment.title)
-      } else if (attachment.fileKey) {
-        // Handle file attachments - fetch actual content from file system/R2
-        try {
-          let fileContent = ''
-          
-          if (attachment.type === 'txt') {
-            // For text files, we should fetch the content from R2/file system
-            // For now, using title as placeholder - this needs file fetching implementation
-            fileContent = attachment.title || ''
-            console.log('📁 Text file attachment (using title for now):', attachment.title)
-          } else if (attachment.type === 'pdf' || attachment.type === 'docx') {
-            // For other document types, we'd need proper file processing
-            // This should be implemented with file readers
-            console.log('📄 Document file attachment (needs processing):', attachment.title)
-          }
-          
-          if (fileContent) {
-            parsedAttachments.push({
-              type: attachment.type,
-              title: attachment.title,
-              text: fileContent.slice(0, 8000), // Increased limit
-            })
-          }
-        } catch (error) {
-          console.error('❌ Failed to process file attachment:', attachment.fileKey, error)
-        }
-      }
-    }
-  }
-
-  console.log('✅ Parsing complete. Links:', links.length, 'Attachments:', parsedAttachments.length)
-  return { links, attachments: parsedAttachments }
-}
 
 export const chatRouter = createTRPCRouter({
   // Get message history for a specific chat
@@ -446,7 +353,17 @@ export const chatRouter = createTRPCRouter({
           await saveChatHistoryList(user.email, updatedHistory)
         },
         onError(error) {
-          console.log('❌❌❌ ERROR:', JSON.stringify(error, null, 2))
+          console.log('❌❌❌ CHAT STREAM ERROR:', JSON.stringify(error, null, 2))
+          console.log('❌ Error details:', {
+            name: error?.name,
+            message: error?.message,
+            stack: error?.stack?.slice(0, 500),
+          })
+          
+          // Check if it's an attachment processing error
+          if (error?.message?.includes('attachment') || error?.message?.includes('knowledge')) {
+            console.log('🔍 Possible attachment processing error detected')
+          }
           
           throw new TRPCError({
             code: 'INTERNAL_SERVER_ERROR',
@@ -485,7 +402,8 @@ export const chatRouter = createTRPCRouter({
           const tweets = message.metadata?.tweets ?? []
           
           const result = streamText({
-            model: openrouter.chat('anthropic/claude-3-5-sonnet-20241022', {
+            model: openrouter.chat('openai/gpt-4.1', {
+              models: ['openai/gpt-4o'],
               reasoning: { enabled: false, effort: 'low' },
             }),
             system: assistantPrompt({ tweets }),

@@ -78,9 +78,7 @@ export function KnowledgeSelector({ onSelectDocument, className, threadContext }
 
   const { data: knowledgeData, isLoading } = trpc.knowledge.list.useQuery({
     search: searchQuery || undefined,
-    limit: 50, // Increased to allow better filtering
-    // Add thread context to query if needed
-    category: selectedCategory === 'thread-optimal' ? 'thread-optimal' : undefined,
+    limit: 50
   })
 
   const rawDocuments = knowledgeData?.documents || []
