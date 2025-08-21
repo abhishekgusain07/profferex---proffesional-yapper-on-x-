@@ -8,6 +8,7 @@ import {
   getDocument 
 } from '@/db/queries/knowledge'
 import { TRPCError } from '@trpc/server'
+import { firecrawl } from '@/lib/firecrawl'
 
 export const knowledgeRouter = createTRPCRouter({
   // List all knowledge documents for the user
@@ -171,15 +172,58 @@ export const knowledgeRouter = createTRPCRouter({
     .input(z.object({ url: z.string().url() }))
     .mutation(async ({ ctx, input }) => {
       try {
-        // For now, create a simple URL document
-        // TODO: Add web scraping functionality
+        // Check if it's a Twitter/X URL
+        const twitterRegex = /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/
+        const isTwitterUrl = twitterRegex.test(input.url)
+        
+        let title = `Website: ${new URL(input.url).hostname}`
+        let description = 'Imported website content'
+        let metadata: Record<string, any> = {}
+
+        // Use Firecrawl to scrape the content
+        try {
+          const scrapeResult = await firecrawl.scrapeUrl(input.url, {
+            formats: ['markdown', 'html'],
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; ContentPortBot/1.0)',
+            },
+          })
+
+          if (scrapeResult.success && scrapeResult.data) {
+            title = scrapeResult.data.metadata?.title || title
+            description = scrapeResult.data.metadata?.description || scrapeResult.data.markdown?.substring(0, 200) + '...' || description
+            
+            metadata = {
+              content: scrapeResult.data.markdown,
+              html: scrapeResult.data.html,
+              metadata: scrapeResult.data.metadata,
+              author: scrapeResult.data.metadata?.author,
+              publishedTime: scrapeResult.data.metadata?.publishedTime,
+              modifiedTime: scrapeResult.data.metadata?.modifiedTime,
+              tags: scrapeResult.data.metadata?.tags,
+            }
+
+            // For Twitter URLs, extract additional metadata
+            if (isTwitterUrl) {
+              const tweetIdMatch = input.url.match(twitterRegex)
+              if (tweetIdMatch) {
+                metadata.tweetId = tweetIdMatch[1]
+                metadata.platform = 'twitter'
+              }
+            }
+          }
+        } catch (firecrawlError) {
+          console.warn('Firecrawl scraping failed, creating basic document:', firecrawlError)
+        }
+
         const document = await createDocument({
-          title: `Website: ${new URL(input.url).hostname}`,
+          title,
           fileName: '',
           type: 'url',
           s3Key: '',
-          description: 'Imported website content',
+          description,
           sourceUrl: input.url,
+          metadata,
           userId: ctx.user.id,
         })
 
@@ -188,6 +232,7 @@ export const knowledgeRouter = createTRPCRouter({
           documentId: document.id,
           title: document.title,
           url: input.url,
+          metadata,
         }
       } catch (error) {
         console.error('Error importing URL:', error)

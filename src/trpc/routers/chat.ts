@@ -21,6 +21,7 @@ import {
 import { format } from 'date-fns'
 import { HTTPException } from 'hono/http-exception'
 import { createTweetTool } from './chat/tools/create-tweet-tool'
+import { createReadWebsiteContentTool } from '@/lib/read-website-content'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { assistantPrompt } from '@/lib/prompt-utils'
 import { XmlPrompt } from '@/lib/xml-prompt'
@@ -338,6 +339,11 @@ export const chatRouter = createTRPCRouter({
               },
             },
           })
+
+          // Create website reading tool
+          const readWebsiteContent = createReadWebsiteContentTool({
+            conversationId: id,
+          })
           
           // Get tweets from metadata (if any)
           const tweets = message.metadata?.tweets ?? []
@@ -348,7 +354,7 @@ export const chatRouter = createTRPCRouter({
             }),
             system: assistantPrompt({ tweets }),
             messages: convertToModelMessages(messages),
-            tools: { writeTweet },
+            tools: { writeTweet, readWebsiteContent },
             stopWhen: stepCountIs(3),
             experimental_transform: smoothStream({
               delayInMs: 20,

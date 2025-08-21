@@ -118,7 +118,7 @@ export function useSessionLoadingPerformance() {
 
       const navigationEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[]
       const navEntry = navigationEntries[0]
-      const timeToInteractive = navEntry?.domInteractive - navEntry?.navigationStart || 0
+      const timeToInteractive = navEntry?.domInteractive - navEntry?.startTime || 0
 
       const loadMetrics = {
         sessionLoadTime,

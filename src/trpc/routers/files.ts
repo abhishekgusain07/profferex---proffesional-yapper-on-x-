@@ -3,22 +3,59 @@ import { z } from 'zod'
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post'
 import { nanoid } from 'nanoid'
+import { TRPCError } from '@trpc/server'
+import { createDocument } from '@/db/queries/knowledge'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB
 const MAX_GIF_BYTES = 15 * 1024 * 1024 // 15MB
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024 // 50MB (MVP-safe)
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024 // 10MB for documents
+
+const ALLOWED_DOCUMENT_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/markdown',
+]
+
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+]
+
+const FILE_TYPE_MAP = {
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'text/plain': 'txt',
+  'text/markdown': 'txt',
+  'image/jpeg': 'image',
+  'image/png': 'image',
+  'image/gif': 'image',
+  'image/webp': 'image',
+  'image/svg+xml': 'image',
+} as const
 
 function inferExtension(mime: string) {
   if (mime === 'image/gif') return 'gif'
   if (mime.startsWith('image/')) return mime.split('/')[1] || 'png'
   if (mime === 'video/mp4') return 'mp4'
   if (mime === 'video/quicktime') return 'mov'
+  if (mime === 'application/pdf') return 'pdf'
+  if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx'
+  if (mime === 'text/plain' || mime === 'text/markdown') return 'txt'
   return 'bin'
 }
 
 export const filesRouter = createTRPCRouter({
   createPresignedPost: protectedProcedure
-    .input(z.object({ fileName: z.string().min(1), fileType: z.string().min(1) }))
+    .input(z.object({ 
+      fileName: z.string().min(1), 
+      fileType: z.string().min(1),
+      source: z.enum(['knowledge', 'chat']).optional().default('chat')
+    }))
     .mutation(async ({ ctx, input }) => {
       console.log('🚀 [FILES] Starting createPresignedPost mutation')
       console.log('🔧 [FILES] R2 Config:', {
@@ -32,23 +69,33 @@ export const filesRouter = createTRPCRouter({
         throw new Error('R2 bucket not configured')
       }
 
-      const { fileName, fileType } = input
-      console.log('📄 [FILES] Input:', { fileName, fileType })
+      const { fileName, fileType, source } = input
+      console.log('📄 [FILES] Input:', { fileName, fileType, source })
 
       const isImage = fileType.startsWith('image/') && fileType !== 'image/gif'
       const isGif = fileType === 'image/gif'
       const isVideo = fileType.startsWith('video/')
+      const isDocument = ALLOWED_DOCUMENT_TYPES.includes(fileType)
 
-      const maxSize = isImage ? MAX_IMAGE_BYTES : isGif ? MAX_GIF_BYTES : isVideo ? MAX_VIDEO_BYTES : 0
-      console.log('📏 [FILES] File validation:', { isImage, isGif, isVideo, maxSize })
-
-      if (!maxSize) {
+      const isValidFileType = [...ALLOWED_DOCUMENT_TYPES, ...ALLOWED_IMAGE_TYPES, 'video/mp4', 'video/quicktime'].includes(fileType)
+      
+      if (!isValidFileType) {
         console.error('❌ [FILES] Unsupported file type:', fileType)
-        throw new Error('Unsupported file type')
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid file type. Please upload a document (pdf, docx, txt) or image'
+        })
       }
 
+      const maxSize = isImage ? MAX_IMAGE_BYTES : 
+                     isGif ? MAX_GIF_BYTES : 
+                     isVideo ? MAX_VIDEO_BYTES : 
+                     isDocument ? MAX_DOCUMENT_BYTES : 0
+
+      console.log('📏 [FILES] File validation:', { isImage, isGif, isVideo, isDocument, maxSize })
+
       const ext = inferExtension(fileType)
-      const key = `${ctx.user.id}/${nanoid()}.${ext}`
+      const key = `${source}/${ctx.user.id}/${nanoid()}.${ext}`
       console.log('🔑 [FILES] Generated key:', key)
 
       try {
@@ -74,10 +121,55 @@ export const filesRouter = createTRPCRouter({
         console.log('🌐 [FILES] URL:', url)
         console.log('🏷️  [FILES] Fields:', fields)
         
-        return { url, fields, key }
+        const type = FILE_TYPE_MAP[fileType as keyof typeof FILE_TYPE_MAP]
+        
+        return { url, fields, key, type }
       } catch (error) {
         console.error('❌ [FILES] Failed to create presigned POST:', error)
         throw error
+      }
+    }),
+
+  // Promote a uploaded file to a knowledge document
+  promoteToKnowledgeDocument: protectedProcedure
+    .input(z.object({
+      fileKey: z.string(),
+      fileName: z.string(),
+      title: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { fileKey, fileName, title, description } = input
+      
+      try {
+        // Extract file type from the key or determine it
+        const ext = fileKey.split('.').pop()
+        let type: 'pdf' | 'docx' | 'txt' | 'image' | 'url' | 'manual' = 'manual'
+        
+        if (ext === 'pdf') type = 'pdf'
+        else if (ext === 'docx') type = 'docx'
+        else if (ext === 'txt') type = 'txt'
+        else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) type = 'image'
+
+        const document = await createDocument({
+          title: title || fileName,
+          fileName,
+          type,
+          s3Key: fileKey,
+          description: description || '',
+          userId: ctx.user.id,
+        })
+
+        return {
+          success: true,
+          document
+        }
+      } catch (error) {
+        console.error('Error promoting file to knowledge document:', error)
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create knowledge document'
+        })
       }
     }),
 }) 

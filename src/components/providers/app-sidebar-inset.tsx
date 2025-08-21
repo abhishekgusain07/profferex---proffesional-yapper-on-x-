@@ -21,7 +21,7 @@ import { toast } from 'react-hot-toast'
 import { $getRoot } from 'lexical'
 import { usePathname } from 'next/navigation'
 
-export function AppSidebarInset({ children }: { children: React.ReactNode }) {
+export function AppSidebarInset({ children, className}: { children: React.ReactNode, className ?: string}) {
   const { state, toggleSidebar } = useSidebar()
   const isCollapsed = state === 'collapsed'
   const pathname = usePathname()

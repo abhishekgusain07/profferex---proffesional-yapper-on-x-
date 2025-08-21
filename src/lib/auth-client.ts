@@ -9,7 +9,7 @@ export const authClient = createAuthClient({
         plan: { type: 'string', defaultValue: 'free' },
         stripeId: { type: 'string', required: false },
         hadTrial: { type: 'boolean', defaultValue: false },
-        goals: { type: 'object', required: false },
+        goals: { type: 'FieldType', required: false },
         frequency: { type: 'number', required: false },
       },
     }),
