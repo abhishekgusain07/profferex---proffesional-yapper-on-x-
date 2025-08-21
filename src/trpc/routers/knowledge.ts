@@ -242,4 +242,75 @@ export const knowledgeRouter = createTRPCRouter({
         })
       }
     }),
+
+  // Process content for a knowledge document (extract text, analyze, etc.)
+  processContent: protectedProcedure
+    .input(z.object({ documentId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const document = await getDocument(input.documentId, ctx.user.id)
+        
+        if (!document) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Document not found',
+          })
+        }
+
+        // For URL documents that might need reprocessing
+        if (document.type === 'url' && document.sourceUrl) {
+          try {
+            const scrapeResult = await firecrawl.scrapeUrl(document.sourceUrl, {
+              formats: ['markdown', 'html'],
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; ContentPortBot/1.0)',
+              },
+            })
+
+            if (scrapeResult.success && scrapeResult.data) {
+              const updatedMetadata = {
+                ...document.metadata,
+                content: scrapeResult.data.markdown,
+                html: scrapeResult.data.html,
+                metadata: scrapeResult.data.metadata,
+                lastProcessed: new Date().toISOString(),
+              }
+
+              const updatedDocument = await updateDocument(document.id, ctx.user.id, {
+                metadata: updatedMetadata,
+                description: scrapeResult.data.metadata?.description || 
+                            scrapeResult.data.markdown?.substring(0, 200) + '...' || 
+                            document.description,
+              })
+
+              return {
+                success: true,
+                document: updatedDocument,
+                message: 'Content reprocessed successfully',
+              }
+            }
+          } catch (firecrawlError) {
+            console.warn('Firecrawl reprocessing failed:', firecrawlError)
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: 'Failed to reprocess URL content',
+            })
+          }
+        }
+
+        return {
+          success: false,
+          message: 'Document type not supported for processing or already processed',
+        }
+      } catch (error) {
+        console.error('Error processing document content:', error)
+        if (error instanceof TRPCError) {
+          throw error
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to process document content',
+        })
+      }
+    }),
 })

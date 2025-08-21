@@ -2,9 +2,12 @@ import { createTRPCRouter, protectedProcedure } from '../init'
 import { z } from 'zod'
 import { r2Client, R2_BUCKET_NAME } from '@/lib/r2'
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post'
+import { GetObjectCommand } from '@aws-sdk/client-s3'
 import { nanoid } from 'nanoid'
 import { TRPCError } from '@trpc/server'
 import { createDocument } from '@/db/queries/knowledge'
+import pdfParse from 'pdf-parse'
+import mammoth from 'mammoth'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB
 const MAX_GIF_BYTES = 15 * 1024 * 1024 // 15MB
@@ -130,7 +133,7 @@ export const filesRouter = createTRPCRouter({
       }
     }),
 
-  // Promote a uploaded file to a knowledge document
+  // Promote a uploaded file to a knowledge document with content extraction
   promoteToKnowledgeDocument: protectedProcedure
     .input(z.object({
       fileKey: z.string(),
@@ -151,12 +154,75 @@ export const filesRouter = createTRPCRouter({
         else if (ext === 'txt') type = 'txt'
         else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) type = 'image'
 
+        let extractedDescription = description || ''
+        let metadata: Record<string, any> = {}
+
+        // Extract content from document files
+        if (type === 'pdf' || type === 'docx' || type === 'txt') {
+          try {
+            const getObjectCommand = new GetObjectCommand({
+              Bucket: R2_BUCKET_NAME,
+              Key: fileKey,
+            })
+            
+            const response = await r2Client.send(getObjectCommand)
+            const bodyBytes = await response.Body?.transformToByteArray()
+            
+            if (bodyBytes) {
+              const buffer = Buffer.from(bodyBytes)
+              
+              if (type === 'pdf') {
+                const { info, text } = await pdfParse(buffer)
+                
+                let metadataDescription = ''
+                if (info?.Title) {
+                  metadataDescription += info.Title
+                }
+                if (info?.Subject && info.Subject !== info?.Title) {
+                  metadataDescription += metadataDescription ? ` - ${info.Subject}` : info.Subject
+                }
+                if (info?.Author) {
+                  metadataDescription += metadataDescription
+                    ? ` by ${info.Author}`
+                    : `by ${info.Author}`
+                }
+                
+                extractedDescription = (metadataDescription.trim() + ' ' + text.slice(0, 200)).slice(0, 300)
+                metadata = {
+                  content: text,
+                  pdfInfo: info,
+                  wordCount: text.split(/\s+/).length,
+                  pageCount: info?.numpages || 0,
+                }
+              } else if (type === 'docx') {
+                const { value } = await mammoth.extractRawText({ buffer })
+                extractedDescription = value.slice(0, 300)
+                metadata = {
+                  content: value,
+                  wordCount: value.split(/\s+/).length,
+                }
+              } else if (type === 'txt') {
+                const text = buffer.toString('utf-8')
+                extractedDescription = text.slice(0, 300)
+                metadata = {
+                  content: text,
+                  wordCount: text.split(/\s+/).length,
+                }
+              }
+            }
+          } catch (extractionError) {
+            console.warn('Failed to extract content from document:', extractionError)
+            extractedDescription = description || 'Content extraction failed'
+          }
+        }
+
         const document = await createDocument({
           title: title || fileName,
           fileName,
           type,
           s3Key: fileKey,
-          description: description || '',
+          description: extractedDescription,
+          metadata,
           userId: ctx.user.id,
         })
 
