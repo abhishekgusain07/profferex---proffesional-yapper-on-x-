@@ -57,6 +57,7 @@ export interface SelectedKnowledgeDocument {
   type: 'url' | 'txt' | 'docx' | 'pdf' | 'image' | 'manual'
   s3Key?: string
   description?: string
+  sourceUrl?: string
 }
 
 interface KnowledgeSelectorProps {
@@ -115,6 +116,7 @@ export function KnowledgeSelector({ onSelectDocument, className, threadContext }
       type: doc.type,
       s3Key: doc.s3Key,
       description: doc.description,
+      sourceUrl: doc.sourceUrl,
     })
     setIsOpen(false)
     setSearchQuery('')

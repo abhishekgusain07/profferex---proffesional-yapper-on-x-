@@ -306,6 +306,9 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     async (text: string) => {
       if (!text.trim()) return
 
+      console.log('🚀 Submitting message with attachments:', attachments.length)
+      console.log('📎 Attachments:', attachments.map(a => ({ id: a.id, title: a.title, variant: a.variant, type: a.type })))
+
       if (!Boolean(searchParams.get('chatId'))) {
         updateURL('chatId', id)
       }
@@ -313,21 +316,28 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
       // Convert tweets to PayloadTweet format
       const payloadTweets = tweets.map(toPayloadTweet)
 
+      const attachmentData = attachments.map(att => ({
+        ...att,
+        title: att.title || undefined
+      }))
+
+      console.log('📤 Sending message with processed attachments:', attachmentData.length)
+
       sendMessage({
         text,
         metadata: { 
-          attachments: attachments.map(att => ({
-            ...att,
-            title: att.title || undefined
-          })), 
+          attachments: attachmentData, 
           tweets: payloadTweets, 
           userMessage: text 
         },
       })
 
+      // Clear attachments after successful send
       if (attachments.length > 0) {
+        console.log('🧹 Clearing attachments after send')
         requestAnimationFrame(() => {
           attachments.forEach((a) => {
+            console.log('🗑️  Removing attachment:', a.id, a.title)
             removeAttachment({ id: a.id })
           })
         })

@@ -23,7 +23,8 @@ export interface ChatAttachment extends BaseAttachment {
 
 export interface KnowledgeAttachment extends BaseAttachment {
   variant: 'knowledge'
-  content?: string
+  sourceUrl?: string
+  s3Key?: string
 }
 
 export type Attachment = ChatAttachment | KnowledgeAttachment

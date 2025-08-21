@@ -165,19 +165,27 @@ async function parseAttachments({
     return { links, attachments: parsedAttachments }
   }
 
+  console.log('🔍 Processing attachments:', attachments.length, 'items')
+
   for (const attachment of attachments) {
+    console.log('📎 Processing attachment:', attachment.id, attachment.variant, attachment.type)
+
     if (attachment.variant === 'knowledge') {
       // Handle knowledge documents
       try {
         const document = await getDocument(attachment.id, userId)
         
         if (document) {
+          console.log('📄 Knowledge document found:', document.title, 'type:', document.type)
+          
           if (document.type === 'url' && document.sourceUrl) {
             // For URL knowledge documents, add as link with content
+            const content = document.metadata?.content || document.description || ''
             links.push({
               link: document.sourceUrl,
-              content: document.metadata?.content || document.description || ''
+              content: content
             })
+            console.log('🔗 Added URL link with content length:', content.length)
           } else {
             // For other knowledge documents, add as text attachment
             const content = document.metadata?.content || document.description || ''
@@ -185,28 +193,55 @@ async function parseAttachments({
               parsedAttachments.push({
                 type: 'knowledge',
                 title: document.title,
-                text: content.slice(0, 2000), // Limit content size
+                text: content.slice(0, 8000), // Increased from 2000 to 8000 chars
               })
+              console.log('📝 Added knowledge doc with content length:', content.length)
+            } else {
+              console.warn('⚠️  Knowledge document has no content:', document.title)
             }
           }
+        } else {
+          console.warn('⚠️  Knowledge document not found:', attachment.id)
         }
       } catch (error) {
-        console.warn('Failed to load knowledge document:', attachment.id, error)
+        console.error('❌ Failed to load knowledge document:', attachment.id, error)
       }
     } else if (attachment.variant === 'chat') {
       // Handle chat attachments
       if (attachment.type === 'url') {
         links.push({ link: attachment.title || '' })
-      } else if (attachment.type === 'txt' && attachment.fileKey) {
-        // Handle text file content
-        parsedAttachments.push({
-          type: 'text',
-          text: attachment.title || '',
-        })
+        console.log('🔗 Added chat URL:', attachment.title)
+      } else if (attachment.fileKey) {
+        // Handle file attachments - fetch actual content from file system/R2
+        try {
+          let fileContent = ''
+          
+          if (attachment.type === 'txt') {
+            // For text files, we should fetch the content from R2/file system
+            // For now, using title as placeholder - this needs file fetching implementation
+            fileContent = attachment.title || ''
+            console.log('📁 Text file attachment (using title for now):', attachment.title)
+          } else if (attachment.type === 'pdf' || attachment.type === 'docx') {
+            // For other document types, we'd need proper file processing
+            // This should be implemented with file readers
+            console.log('📄 Document file attachment (needs processing):', attachment.title)
+          }
+          
+          if (fileContent) {
+            parsedAttachments.push({
+              type: attachment.type,
+              title: attachment.title,
+              text: fileContent.slice(0, 8000), // Increased limit
+            })
+          }
+        } catch (error) {
+          console.error('❌ Failed to process file attachment:', attachment.fileKey, error)
+        }
       }
     }
   }
 
+  console.log('✅ Parsing complete. Links:', links.length, 'Attachments:', parsedAttachments.length)
   return { links, attachments: parsedAttachments }
 }
 
@@ -255,14 +290,51 @@ export const chatRouter = createTRPCRouter({
         limiter: Ratelimit.slidingWindow(80, '4h') 
       })
 
-      const [history, parsedAttachments, limitResult] = await Promise.all([
-        getMessagesFromRedis(id),
-        parseAttachments({
-          attachments: message.metadata?.attachments as TAttachment[],
-          userId: user.id,
-        }),
-        limiter.limit(user.email),
-      ])
+      console.log('🔄 Starting message processing for user:', user.email)
+      console.log('📥 Input attachments:', message.metadata?.attachments?.length || 0)
+      
+      let parsedAttachments: { links: Array<{ link: string; content?: string }>; attachments: Array<{ type: string; text?: string; title?: string }> }
+      let history: any
+      let limitResult: any
+      
+      try {
+        const [historyResult, attachmentResults, rateLimitResult] = await Promise.all([
+          getMessagesFromRedis(id),
+          parseAttachments({
+            attachments: message.metadata?.attachments as TAttachment[],
+            userId: user.id,
+          }),
+          limiter.limit(user.email),
+        ])
+        
+        history = historyResult
+        parsedAttachments = attachmentResults
+        limitResult = rateLimitResult
+        console.log('✅ Successfully processed all data')
+        
+      } catch (error) {
+        console.error('❌ Error processing message data:', error)
+        
+        // Try to get at least history and rate limit, fallback for attachments
+        try {
+          const [historyResult, rateLimitResult] = await Promise.all([
+            getMessagesFromRedis(id),
+            limiter.limit(user.email),
+          ])
+          history = historyResult
+          limitResult = rateLimitResult
+        } catch (fallbackError) {
+          console.error('❌ Fallback processing also failed:', fallbackError)
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Failed to process message data',
+          })
+        }
+        
+        // Use empty attachments if parsing failed
+        parsedAttachments = { links: [], attachments: [] }
+        console.log('⚠️  Continuing with empty attachments due to processing error')
+      }
 
       if (process.env.NODE_ENV === 'production') {
         const { success } = limitResult
@@ -275,6 +347,13 @@ export const chatRouter = createTRPCRouter({
       }
 
       const { links, attachments } = parsedAttachments
+
+      console.log('🔨 Building AI content with:', {
+        linksCount: links.length,
+        attachmentsCount: attachments.length,
+        linksWithContent: links.filter(l => l.content).length,
+        attachmentsWithText: attachments.filter(a => a.text).length
+      })
 
       // Build content for the AI
       let content = ''
@@ -292,6 +371,7 @@ export const chatRouter = createTRPCRouter({
           content += `<link url="${l.link}">`
           if (l.content) {
             content += `<content>${l.content}</content>`
+            console.log('🔗 Including link content for:', l.link, 'length:', l.content.length)
           }
           content += `</link>`
         })
@@ -306,6 +386,7 @@ export const chatRouter = createTRPCRouter({
           content += `>`
           if (att.text) {
             content += `<content>${att.text}</content>`
+            console.log('📄 Including document content for:', att.title, 'length:', att.text.length)
           }
           content += `</document>`
         })
@@ -325,6 +406,9 @@ export const chatRouter = createTRPCRouter({
       }
 
       content += '</message>'
+
+      console.log('🤖 Final AI content length:', content.length)
+      console.log('📋 AI content preview:', content.substring(0, 500) + (content.length > 500 ? '...' : ''))
 
       const userMessage: MyUIMessage = {
         ...message,

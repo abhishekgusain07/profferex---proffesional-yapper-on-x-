@@ -229,7 +229,9 @@ export function AttachmentsProvider({ children }: PropsWithChildren) {
       title: doc.title,
       type: doc.type,
       variant: 'knowledge',
-      content: doc.description,
+      // Remove content field - let parseAttachments fetch from database
+      sourceUrl: doc.sourceUrl,
+      s3Key: doc.s3Key,
     }
 
     setAttachments(prev => {
