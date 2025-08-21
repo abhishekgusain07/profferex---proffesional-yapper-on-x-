@@ -22,6 +22,7 @@ import { format } from 'date-fns'
 import { HTTPException } from 'hono/http-exception'
 import { createTweetTool } from './chat/tools/create-tweet-tool'
 import { createReadWebsiteContentTool } from '@/lib/read-website-content'
+import { getDocument } from '@/db/queries/knowledge'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { assistantPrompt } from '@/lib/prompt-utils'
 import { XmlPrompt } from '@/lib/xml-prompt'
@@ -149,28 +150,60 @@ async function updateChatHistoryList(userEmail: string, chatId: string, title: s
   await saveChatHistoryList(userEmail, updatedHistory.slice(0, 20)) // Keep only last 20 chats
 }
 
-// Parse attachments helper
+// Parse attachments helper - Enhanced to handle knowledge documents
 async function parseAttachments({
   attachments,
+  userId,
 }: {
   attachments?: Array<TAttachment>
+  userId: string
 }) {
-  const links: Array<{ link: string }> = []
-  const parsedAttachments: Array<{ type: string; text?: string }> = []
+  const links: Array<{ link: string; content?: string }> = []
+  const parsedAttachments: Array<{ type: string; text?: string; title?: string }> = []
 
   if (!attachments) {
     return { links, attachments: parsedAttachments }
   }
 
   for (const attachment of attachments) {
-    if (attachment.type === 'url') {
-      links.push({ link: attachment.title || '' })
-    } else if (attachment.type === 'txt' && attachment.fileKey) {
-      // Handle text file content
-      parsedAttachments.push({
-        type: 'text',
-        text: attachment.title || '',
-      })
+    if (attachment.variant === 'knowledge') {
+      // Handle knowledge documents
+      try {
+        const document = await getDocument(attachment.id, userId)
+        
+        if (document) {
+          if (document.type === 'url' && document.sourceUrl) {
+            // For URL knowledge documents, add as link with content
+            links.push({
+              link: document.sourceUrl,
+              content: document.metadata?.content || document.description || ''
+            })
+          } else {
+            // For other knowledge documents, add as text attachment
+            const content = document.metadata?.content || document.description || ''
+            if (content) {
+              parsedAttachments.push({
+                type: 'knowledge',
+                title: document.title,
+                text: content.slice(0, 2000), // Limit content size
+              })
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load knowledge document:', attachment.id, error)
+      }
+    } else if (attachment.variant === 'chat') {
+      // Handle chat attachments
+      if (attachment.type === 'url') {
+        links.push({ link: attachment.title || '' })
+      } else if (attachment.type === 'txt' && attachment.fileKey) {
+        // Handle text file content
+        parsedAttachments.push({
+          type: 'text',
+          text: attachment.title || '',
+        })
+      }
     }
   }
 
@@ -226,6 +259,7 @@ export const chatRouter = createTRPCRouter({
         getMessagesFromRedis(id),
         parseAttachments({
           attachments: message.metadata?.attachments as TAttachment[],
+          userId: user.id,
         }),
         limiter.limit(user.email),
       ])
@@ -255,9 +289,27 @@ export const chatRouter = createTRPCRouter({
       if (Boolean(links.length)) {
         content += '<attached_links>'
         links.filter(Boolean).forEach((l) => {
-          content += `<link>${l.link}</link>`
+          content += `<link url="${l.link}">`
+          if (l.content) {
+            content += `<content>${l.content}</content>`
+          }
+          content += `</link>`
         })
         content += '</attached_links>'
+      }
+
+      if (Boolean(attachments.length)) {
+        content += '<attached_documents>'
+        attachments.forEach((att) => {
+          content += `<document type="${att.type}"`
+          if (att.title) content += ` title="${att.title}"`
+          content += `>`
+          if (att.text) {
+            content += `<content>${att.text}</content>`
+          }
+          content += `</document>`
+        })
+        content += '</attached_documents>'
       }
 
       if (message.metadata?.tweets) {
