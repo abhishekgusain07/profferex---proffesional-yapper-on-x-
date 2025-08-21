@@ -6,7 +6,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3'
 import { nanoid } from 'nanoid'
 import { TRPCError } from '@trpc/server'
 import { createDocument } from '@/db/queries/knowledge'
-import pdfParse from 'pdf-parse'
+import { PDFDocument } from 'pdf-lib'
 import mammoth from 'mammoth'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB
@@ -172,27 +172,39 @@ export const filesRouter = createTRPCRouter({
               const buffer = Buffer.from(bodyBytes)
               
               if (type === 'pdf') {
-                const { info, text } = await pdfParse(buffer)
-                
-                let metadataDescription = ''
-                if (info?.Title) {
-                  metadataDescription += info.Title
-                }
-                if (info?.Subject && info.Subject !== info?.Title) {
-                  metadataDescription += metadataDescription ? ` - ${info.Subject}` : info.Subject
-                }
-                if (info?.Author) {
-                  metadataDescription += metadataDescription
-                    ? ` by ${info.Author}`
-                    : `by ${info.Author}`
-                }
-                
-                extractedDescription = (metadataDescription.trim() + ' ' + text.slice(0, 200)).slice(0, 300)
-                metadata = {
-                  content: text,
-                  pdfInfo: info,
-                  wordCount: text.split(/\s+/).length,
-                  pageCount: info?.numpages || 0,
+                try {
+                  const pdfDoc = await PDFDocument.load(buffer)
+                  const pageCount = pdfDoc.getPageCount()
+                  
+                  // Basic PDF info extraction
+                  const title = pdfDoc.getTitle() || ''
+                  const author = pdfDoc.getAuthor() || ''
+                  const subject = pdfDoc.getSubject() || ''
+                  
+                  let metadataDescription = ''
+                  if (title) metadataDescription += title
+                  if (subject && subject !== title) {
+                    metadataDescription += metadataDescription ? ` - ${subject}` : subject
+                  }
+                  if (author) {
+                    metadataDescription += metadataDescription ? ` by ${author}` : `by ${author}`
+                  }
+                  
+                  extractedDescription = metadataDescription.trim() || description || 'PDF document'
+                  metadata = {
+                    content: `PDF document with ${pageCount} pages. Text extraction not available with current library.`,
+                    pdfInfo: { title, author, subject, numpages: pageCount },
+                    wordCount: 0,
+                    pageCount,
+                  }
+                } catch (pdfError) {
+                  console.warn('Failed to parse PDF:', pdfError)
+                  extractedDescription = description || 'PDF document (parsing failed)'
+                  metadata = {
+                    content: 'PDF parsing failed',
+                    wordCount: 0,
+                    pageCount: 0,
+                  }
                 }
               } else if (type === 'docx') {
                 const { value } = await mammoth.extractRawText({ buffer })
