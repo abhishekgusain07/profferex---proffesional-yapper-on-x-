@@ -192,7 +192,7 @@ async function parseAttachments({
             if (content) {
               parsedAttachments.push({
                 type: 'knowledge',
-                title: document.title,
+                title: document.title!,
                 text: content.slice(0, 8000), // Increased from 2000 to 8000 chars
               })
               console.log('📝 Added knowledge doc with content length:', content.length)
